@@ -1,6 +1,8 @@
 ---
 title: 'Basic Portfolio Optimization, Re-balancing and Back-Testing in R'
-output: html_document
+output: 
+  github_document:
+    toc: true
 ---
 
 # 1 Introduction
