@@ -1,0 +1,65 @@
+---
+title: "Classification Using Logistic Regression Models"
+output: 
+  github_document:
+    toc: true
+---
+
+# 1 Introduction
+
+The purpose of this project was to apply what I had learnt about logistic regression and classification in machine learning (ML). It documents (1) the packages and functions that are useful for logistic classification and ML, and (2) the steps to building a logistic classification model in R.
+
+The project has three main parts. In the first part, I introduced what logistic regression is and why it is used in classification in machine learning. In the second part, I provided examples of logistic regression in binomial classification (i.e. there are only two outcomes) using an in-built dataset in R. In the third part, I attempted to use logistic regression in multinomial classification (i.e. there are more than two outcomes) using an in-built dataset as well.
+
+## 1.1 What is logistic regression and why is it used in classification problems?
+
+
+## 1.2 What are the assumptions needed for logistic regression?
+
+This sub-section lists the common assumptions of logistic regressions and some of the ways to check them.
+
+### 1.2a Type of logistic regression should match the dependent variable
+
+
+
+### 1.2b Observations are independent
+
+
+
+### 1.2c No high multicollinearity among independent variables
+
+
+
+### 1.2d Linear relationship between independent variables and logit of dependent variable
+
+
+
+### 1.2e No highly influential outliers
+
+
+
+### 1.2f Large sample size
+
+
+
+# 2 Packages Required
+
+
+# 3 Logistic Regression for Binomial Classification
+
+
+# 4 Logistic Regression for Multinomial Classification
+
+
+
+
+
+
+
+
+
+
+# References
+
+
+
