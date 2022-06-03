@@ -9,7 +9,7 @@ output:
 
 The purpose of this project was to apply what I had learnt about logistic regression and classification in machine learning (ML). It documents (1) the packages and functions that are useful for logistic classification and ML, and (2) the steps to building a logistic classification model in R.
 
-The project has three main parts. In the first part, I introduced what logistic regression is and why it is used in classification in machine learning. In the second part, I provided examples of logistic regression in binomial classification (i.e. there are only two outcomes) using an in-built dataset in R. In the third part, I attempted to use logistic regression in multinomial classification (i.e. there are more than two outcomes) using an in-built dataset as well.
+The project has three main parts. In the first part, I introduced what logistic regression is and why it is used in classification in machine learning. In the second part, I provided examples of logistic regression in binary classification (i.e. there are only two outcomes) using an in-built dataset in R. In the third part, I attempted to use logistic regression in multinomial classification (i.e. there are more than two outcomes) using an in-built dataset as well.
 
 (Intro to be further refined at the end)
 
@@ -21,9 +21,9 @@ This sub-section lists the common assumptions of logistic regressions and some o
 
 ### 1.2a Type of logistic regression matches the response variable
 
-The type of logit regression needs to match the type of outcome. In most cases, logit regression is used for binomial outcomes but there are cases where it might be used for multinomial or ordinal outcomes and appropriate models need to be used for each type.
+The type of logit regression needs to match the type of outcome. In most cases, logit regression is used for binary outcomes but there are cases where it might be used for multinomial or ordinal outcomes and appropriate models need to be used for each type.
 
-**To check assumption**: Check the number of unique outcomes/response variable. If there are only two outcomes, it is very likely to be a binomial classification problem. If there are more than two outcomes, we are dealing with multinomial or ordinal classification problems.
+**To check assumption**: Check the number of unique outcomes/response variable. If there are only two outcomes, it is very likely to be a binary classification problem. If there are more than two outcomes, we are dealing with multinomial or ordinal classification problems.
 
 ### 1.2b Observations are independent
 
@@ -55,25 +55,110 @@ A large sample size is needed to produce conclusive results.
 
 # 2 Packages Required
 
-```{r load packages}
-library(car)
-library(caret)
-library(corrplot)
-library(ggplot2)
-library(HH)
+```{r load packages, message=FALSE}
+library(car) 
+library(caret) # For building ML models
+library(corrplot) # For correlation plot
+library(tidyverse) # For ggplot and dplyr packages
+library(mlbench) # For data sets
 ```
 
-# 3 Logistic Regression for Binomial Classification
+These packages provide the necessary functions and data sets that can be used for learning and building logistic classification models.
+
+# 3 Basics of Logistic Regression
+
+To start off with the basics of logistic regression in R, it is best to learn how it works with binary outcomes first. Such outcomes could be 0 or 1, Yes or No, Male or Female, etc. with only 2 possible outcomes. I selected the Pima Indians Diabetes Database in the **`mlbench`** package for this example.
+
+## 3.1 Exploratory Data Analysis
+
+Let us first load the data and perform an Exploratory Data Analysis before the modelling task.
+
+```{r load PimaIndiansDiabetes dataset}
+data("PimaIndiansDiabetes")
+```
+
+```{r structure and summary}
+str(PimaIndiansDiabetes)
+
+summary(PimaIndiansDiabetes)
+```
+
+```{r head and tail of df}
+head(PimaIndiansDiabetes, n = 4)
+
+tail(PimaIndiansDiabetes, n = 4)
+```
+
+By entering `??PimaIndiansDiabetes` into the console, we can get a description of the variables in the data frame. I have listed the variables and its description in the table below.
+
+| Variable | Description                                           |
+|----------|-------------------------------------------------------|
+| pregnant | Number of times pregnant                              |
+| glucose  | Plasma glucose concentration (glucose tolerance test) |
+| pressure | Diastolic blood pressure (mm Hg)                      |
+| triceps  | Triceps skin fold thickness (mm)                      |
+| insulin  | 2-Hour serum insulin (mu U/ml)                        |
+| mass     | Body mass index (weight in kg/(height in m)^2)        |
+| pedigree | Diabetes pedigree function                            |
+| age      | Age (years)                                           |
+| diabetes | Class variable (test for diabetes)                    |
+
+The **`str`** function shows that there are 768 observations with 9 variables and only the variable *`diabetes`* is a factor while all other variables are numeric.
+
+The **`summary`** function reveals that there are possibly some errors in the data, with value of zero in variables *`glucose`*, *`pressure`*, *`triceps`*, and *`mass`*. I would remove these observations to keep things simple.
+
+```{r filter out obs}
+data <- PimaIndiansDiabetes %>%
+  dplyr::filter(glucose != 0 & pressure != 0 & triceps != 0 & mass != 0)
+
+summary(data)
+```
+
+It should be noted that *`insulin`* has zero values as well, which could be due to not receiving insulin despite having diabetes. It could be interesting to look into the distribution of these values. Before that, it might be convenient to split the input and output variables.
+
+```{r split input and output}
+input <- data["diabetes"]
+summary(input)
+
+output <- subset(data, select = -c(diabetes))
+summary(output)
+```
+
+Let us take a look at the distribution of the input and output variables in a univariate plot 
+
+```{r dist of diabetic test}
+plot(input, main = "Distribution of Diabetic Test",
+     ylab = "Frequency")
+```
 
 
 
 
-# 4 Logistic Regression for Multinomial Classification
 
 
 
 
-# 5 Logistic Regression for Ordinal Classification
+
+
+
+
+
+# 4 Logistic Regression for Binary Classification
+
+
+
+
+
+
+# 5 Logistic Regression for Multinomial Classification
+
+
+
+
+
+
+# 6 Logistic Regression for Ordinal Classification
+
 
 
 
@@ -97,20 +182,3 @@ library(HH)
 <https://www.statology.org/assumptions-of-logistic-regression/>
 
 <https://www.theanalysisfactor.com/outliers-to-drop-or-not-to-drop/>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
