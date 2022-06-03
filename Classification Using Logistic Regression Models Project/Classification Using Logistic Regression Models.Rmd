@@ -11,44 +11,73 @@ The purpose of this project was to apply what I had learnt about logistic regres
 
 The project has three main parts. In the first part, I introduced what logistic regression is and why it is used in classification in machine learning. In the second part, I provided examples of logistic regression in binomial classification (i.e. there are only two outcomes) using an in-built dataset in R. In the third part, I attempted to use logistic regression in multinomial classification (i.e. there are more than two outcomes) using an in-built dataset as well.
 
-## 1.1 What is logistic regression and why is it used in classification problems?
+(Intro to be further refined at the end)
 
+## 1.1 What is logistic regression and why is it used in classification problems?
 
 ## 1.2 What are the assumptions needed for logistic regression?
 
 This sub-section lists the common assumptions of logistic regressions and some of the ways to check them.
 
-### 1.2a Type of logistic regression should match the dependent variable
+### 1.2a Type of logistic regression matches the response variable
 
+The type of logit regression needs to match the type of outcome. In most cases, logit regression is used for binomial outcomes but there are cases where it might be used for multinomial or ordinal outcomes and appropriate models need to be used for each type.
 
+**To check assumption**: Check the number of unique outcomes/response variable. If there are only two outcomes, it is very likely to be a binomial classification problem. If there are more than two outcomes, we are dealing with multinomial or ordinal classification problems.
 
 ### 1.2b Observations are independent
 
+Observations need to be explanatory of one another, and not be affected by other observations
 
+**To check assumption**: Plot the residuals against order of observations and check if there is a random pattern. If pattern is not random, it indicates possibility of correlation between observations. However, autocorrelation should be less of a concern with cross-sectional data as long as the design of the study ensures that data are collected from random samples and there are no repeated or paired observations.
 
-### 1.2c No high multicollinearity among independent variables
+### 1.2c No multicollinearity among explanatory variables
 
+Independent variables should not be highly correlated with one another as it affects the variance of estimated coefficients and statistical significance of estimated coefficients becomes unreliable.
 
+**To check assumption**: A simple method would be to use a correlation matrix to find highly correlated explanatory variables. Another method is to calculate the variance inflation factor (VIF) of each explanatory variable. A common rule of thumb is that VIF more than 10 indicates problem of multicollinearity.
 
-### 1.2d Linear relationship between independent variables and logit of dependent variable
+### 1.2d Linear relationship between continuous explanatory variables and logit of response variable
 
+Continuous explanatory variables and the logit of the response variable (or log-odds) have a linear relationship. Logit regression does not require linearity between continuous explanatory variables and response variable.
 
+**To check assumption**: Plot log-odds against each continuous explanatory variable or use the Box-Tidwell test.
 
 ### 1.2e No highly influential outliers
 
+There should be no influential outliers that could affect the outcome of the model. Removing such observations are possible if they are determined to be incorrectly entered or measured. It is also possible to compare the regression results with and without the outliers, and note how the results differ.
 
+**To check assumption**: Calculate Cook's Distance to find influential observations and standardized residuals to find outliers.
 
 ### 1.2f Large sample size
 
-
+A large sample size is needed to produce conclusive results.
 
 # 2 Packages Required
 
+```{r load packages}
+library(car)
+library(caret)
+library(corrplot)
+library(ggplot2)
+library(HH)
+```
 
 # 3 Logistic Regression for Binomial Classification
 
 
+
+
 # 4 Logistic Regression for Multinomial Classification
+
+
+
+
+# 5 Logistic Regression for Ordinal Classification
+
+
+
+
 
 
 
@@ -60,6 +89,28 @@ This sub-section lists the common assumptions of logistic regressions and some o
 
 
 # References
+
+<https://www.statisticssolutions.com/free-resources/directory-of-statistical-analyses/assumptions-of-logistic-regression/>
+
+<https://towardsdatascience.com/assumptions-of-logistic-regression-clearly-explained-44d85a22b290>
+
+<https://www.statology.org/assumptions-of-logistic-regression/>
+
+<https://www.theanalysisfactor.com/outliers-to-drop-or-not-to-drop/>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
