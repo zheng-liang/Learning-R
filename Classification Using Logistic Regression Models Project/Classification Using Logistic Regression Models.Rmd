@@ -1,5 +1,5 @@
 ---
-title: "Classification Using Logistic Regression Models"
+title: "Binary Classification Using Logistic Regression Models"
 output: 
   github_document:
     toc: true
@@ -62,6 +62,7 @@ library(corrplot) # For correlation plot
 library(tidyverse) # For ggplot and dplyr packages
 library(mlbench) # For data sets
 library(lmtest) # For statistical tests
+library(glmnet) # For LASSO logistic regression
 ```
 
 These packages provide the necessary functions and data sets that can be used for learning and building logistic classification models.
@@ -192,11 +193,11 @@ Now that we have a better understanding of the variables in the dataset, we can 
 
 ## 3.2 Building the Binary Logistic Regression Model
 
-To start off, we can create a logistic regression model that uses all the explanatory variables.
+To start off, we can create a logistic regression model that uses all the explanatory variables. We need to use the **`glm`** function and for the **`family`** argument, we indicate \`binomial(link = "logit") for logistic regression.
 
 ```{r create logit model1}
 # Full model
-model1 <- glm(diabetes ~ ., 
+model1 <- glm(diabetes == "pos" ~ ., 
               data = data, 
               family = binomial(link = "logit"))
 
@@ -207,7 +208,7 @@ Variables *`pressure`*, *`triceps`*, *`insulin`*, and *`age`* has p-values more 
 
 ```{r create logit model2}
 # Restricted model
-model2 <- glm(diabetes ~ pregnant + glucose + mass + pedigree,
+model2 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree, #indicate "pos" so that it is 1 and "neg" is 0
               data = data,
               family = binomial(link = "logit"))
 
@@ -235,7 +236,7 @@ None of the variables has a VIF of more than 10. Therefore, it is likely that th
 To check for if there is a linear relationship between the continuous explanatory variables and the logit of the response variable, we need to obtain the fitted probabilities from our model.
 
 ```{r fitted values from model2}
-prob <- fitted.values(model2)
+prob.model2 <- fitted.values(model2)
 ```
 
 ```{r calculate logit and bind into data}
@@ -244,7 +245,7 @@ pred <- names(coef(model2)[-1]) # Exclude intercept
 plotdata <- subset(data, select = pred) # Only keep the variables used in the model
 
 plotdata <- plotdata %>%
-  mutate(logit = log(prob/(1-prob))) %>%
+  mutate(logit = log(prob.model2/(1-prob.model2))) %>%
   gather(key = "pred", value = "pred.value", -logit) # Bind logit to plotdata
 ```
 
@@ -258,7 +259,7 @@ ggplot(data = plotdata, aes(x = logit, y = pred.value)) +
 We can see that variables *`glucose`*, *`mass`* and *`pregnant`* are have a rather linear relationship, but *`pedigree`* has a non-linear relationship with the log-odds. I have attempted to transform the variable using the natural log.
 
 ```{r create logit model3}
-model3 <- glm(diabetes ~ pregnant + glucose + mass + log(pedigree),
+model3 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + log(pedigree),
               data = data,
               family = binomial(link = "logit"))
 
@@ -266,16 +267,16 @@ summary(model3)
 ```
 
 ```{r store fitted values from model3 and calculate logit}
-prob2 <- fitted.values(model3)
+prob.model3 <- fitted.values(model3)
 
-logit = log(prob2/(1-prob2))
+logit = log(prob.model3/(1-prob.model3))
 ```
 
 ```{r transfrom pedigree with log}
 plotdata2 <- subset(data, select = pred)
 
 plotdata2 <- plotdata2 %>%
-  mutate(l.pedigree = log(pedigree), pedigree = NULL)
+  mutate(l.pedigree = log(pedigree))
 ```
 
 ```{r plot logped against logit, fig.width=6, fig.height=4.5, fig.align='center'}
@@ -288,27 +289,188 @@ After the log transformation, *`pedigree`* has a more linear relationship with t
 
 ### 3.2(c) Checking for Highly Influential Outliers
 
+This requires that we find outliers that are highly influential. To determine the observations that have the highest influence, we can plot the Cook's Distance generated from the model or calculate them using **`cooks.distance`** function. To determine the outliers, we use the standardized residuals and check if there are any observations with absolute values greater than 3. We can also use the **`outlierTest`** function in the **`car`** package to calculate the studentized residuals.
+
+```{r cooks distance}
+plot(model3, which = 4)
+
+head(sort(cooks.distance(model3), decreasing = T))
+```
+
+```{r std resid}
+std.resid <- rstandard(model3)
+val <- abs(std.resid) > 3
+table(val)["TRUE"]
+```
+
+```{r studentized resid}
+car::outlierTest(model3)
+```
+
+I had found no outliers that were highly influential based on the tests that were conducted. If outliers were found, instead of removing them, it is better to investigate these observations to check if they were erroneously measured or recorded.
+
+## 3.3 Evaluating the Models
+
+Now that we have created a few models, we can evaluate how each model performs in predicting the in-sample observations. We first store the fitted values of different models and I will set the cutoff at 0.5 to determine whether an observation would be positive or negative to make things simple for now.
+
+### Model 1: Full Model
+
+```{r prob model1}
+prob.model1 <- fitted.values(model1) #can also use predict(model1, type="response")
+```
+
+```{r prediction and conMat model1}
+prediction.model1 <- as.factor(ifelse(prob.model1 > 0.5, "pos", "neg"))
+
+confusionMatrix(data$diabetes, prediction.model1)
+```
+
+### Model 2: Restricted Model (Not Transformed)
+
+```{r prediction and conMat model2}
+prediction.model2 <- as.factor(ifelse(prob.model2 > 0.5, "pos", "neg"))
+
+confusionMatrix(data$diabetes, prediction.model2)
+```
+
+### Model 3: Restricted Model with Transformation
+
+```{r prediction and conMat model3}
+prediction.model3 <- as.factor(ifelse(prob.model3 > 0.5, "pos", "neg"))
+
+confusionMatrix(data$diabetes, prediction.model3)
+```
+
+We can see that Models 2 and 3 have the same evaluation but these models did better than Model 1.
+
+# 4 Binary Classification Using Other Data With Out-of-Sample Evaluation
+
+In Section 3, I explored the basics of logistic regression using the **`glm`** function on the `Pima Indians Diabetes` dataset. However, real world datasets are likely to have much more attributes/variables which we might not be able to select variables simply based off p-values to indicate significance of variables. Another possible problem was the usefulness of the model to predict outcomes on out-of-sample data. Our cutoff value to determine whether a person is positive or negative was also rather arbitrary, and we could improve the prediction when by giving more thought into this cutoff value. I sought to address these problems in this section by applying more real-world techniques and comparing the predictive power of the different models.
+
+## 4.1 Dataset and Exploratory Data Analysis
+
+The dataset that I used is called [`default of credit card clients`](https://archive.ics.uci.edu/ml/datasets/default+of+credit+card+clients), which can be found in the UCI Machine Learning Repository. It contains customer default payments in Taiwan in 2005. Other than the binary classification of default and non-default, the probability of default may also be an important result. The file downloaded is an Excel file and to load it into R, we need the **`readxl`** package.
+
+```{r load readxl package}
+library(readxl)
+```
+
+```{r load dataset from wd}
+# This step loads the file from the working directory. If unsure of wd, use 
+# getwd() to check the location of the wd and setwd() to set the wd where the file is saved.
+default.data <- read_excel("credit card default.xls")
+```
+
+Let us take a peek at `default.data`.
+
+```{r head tail}
+head(default.data)
+
+tail(default.data)
+
+colnames(default.data)
+```
+
+From the **`head`** function, we saw that the first row should be the column names of the data frame and the first column should be the row names. There are many variables, 24 to be exact, with 1 dependent variable (Y, the last column) and 23 independent variables (X1 to X23). I would start by adjusting the column and row names.
+
+```{r adjust column names}
+colnames(default.data) <- default.data[1,]
+
+default.data <- default.data[-1,]
+
+head(default.data)
+```
+
+```{r adjust row names}
+# Remove the first column since ID matches the auto-assigned row numbers.
+default.data <- default.data[,-1]
+
+head(default.data)
+```
+
+Next, I would change the some of the column names to be something more descriptive but it is optional. (May want to consider saving the current data frame into a new data frame so that if there are any errors it can be undone easily by calling the new data frame)
+
+```{r renaming columns}
+newnames <- c("PAY_SEP","PAY_AUG","PAY_JUL", "PAY_JUN", "PAY_MAY", "PAY_APR",
+              "BILLAMT_SEP","BILLAMT_AUG","BILLAMT_JUL", "BILLAMT_JUN", "BILLAMT_MAY", "BILLAMT_APR",
+              "PAYAMT_SEP","PAYAMT_AUG","PAYAMT_JUL", "PAYAMT_JUN", "PAYAMT_MAY", "PAYAMT_APR")
+
+oldnames <-colnames(default.data %>%
+                      dplyr::select(grep("PAY" , names(default.data)), 
+                                    grep("BILL", names(default.data)))) 
+
+colnames(default.data)[colnames(default.data) %in% oldnames] <- newnames
+
+default.data <- default.data %>%
+  rename(default = `default payment next month`)
+
+colnames(default.data)
+```
+
+I have listed the description of the variables in the table below, which can be found in the UCI Machine Learning Repository where the dataset was downloaded from.
+
+| Variable                  | Description                                                                                                         |
+|------------------------|------------------------------------------------|
+| LIMIT_BAL                 | Amount of the given credit, including both the individual consumer credit and his/her family (supplementary) credit |
+| SEX                       | Gender. Male = 1, Female = 2                                                               |
+| EDUCATION                 | Graduate School = 1, University = 2, High School = 3, Others = 4                                                    |
+| MARRIAGE                  | Married = 1, Single = 2, Others = 3                                                                                    |
+| AGE                       | In years                                                                                      |
+| PAY_SEP - PAY_APR         | History of past payment from April to September 2005. Pay duly = -1, Delay one month = 1, Delay two months = 2, ..., Delay nine months or more = 9                        |
+| BILLAMT_SEP - BILLAMT_APR | Amount of bill statement from April to September 2005.                                                                                          |
+| PAYAMT_SEP - PAYAMT_APR   | Amount of previous payment.                                                                                                          |
+| default                   | Response variable. Yes = 1, No = 0.                                                                                 |
+
+Now, we can begin exploring the data set through an Exploratory Data Analysis.
+
+```{r structure}
+str(default.data)
+```
+
+We can see that all the data values has been loaded as characters, and we need to change this to their appropriate types (numeric, factors, etc.).
+
+```{r changing value types}
+# To make it simple we can change all to numeric first, then to factors
+default.data <- default.data %>% 
+  mutate(across(where(is.character), as.numeric))
+
+default.data <- default.data %>%
+  mutate(
+    across(
+      c("SEX", "EDUCATION", "MARRIAGE", "default", 
+             grep("PAY_", names(default.data))), 
+      as.factor))
+
+str(default.data)
+```
+
+```{r summary}
+summary(default.data)
+```
+
+We can see that there are some data that stands out. For example, in the variables *`EDUCATION`* and *`MARRIAGE`*, there is a value of 0 which represents none of the known classes in each of the variables. The variables *`PAY_`* has a value of -2, which was also not indicated in the description of the data. It is likely to be prepayments as variables *`BILLAMT_`* has negative values. 
+
+Let us clean the data for variables *`EDUCATION`* and *`MARRIAGE`*. Since they have each have a class called `Others`, we can consider replacing the unknown classes with this class.
+
+```{r}
+
+```
+
+
+
+We can plot out the variables in a univariate and multivariate plots to visualize how they are distributed and correlate with one another.
+
+### 4.1.1 Univariate Plots
 
 
 
 
 
 
-# 4 Logistic Regression for Binary Classification
 
 
 
 
-
-
-# 5 Logistic Regression for Multinomial Classification
-
-
-
-
-
-
-# 6 Logistic Regression for Ordinal Classification
 
 
 
@@ -334,7 +496,4 @@ After the log transformation, *`pedigree`* has a more linear relationship with t
 
 <https://www.theanalysisfactor.com/outliers-to-drop-or-not-to-drop/>
 
-https://ademos.people.uic.edu/Chapter22.html
-
-
-
+<https://ademos.people.uic.edu/Chapter22.html>
