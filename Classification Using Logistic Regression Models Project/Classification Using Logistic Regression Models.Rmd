@@ -430,9 +430,13 @@ str(default.data)
 We can see that all the data values has been loaded as characters, and we need to change this to their appropriate types (numeric, factors, etc.).
 
 ```{r changing value types}
-# To make it simple we can change all to numeric first, then to factors
 default.data <- default.data %>% 
-  mutate(across(where(is.character), as.numeric))
+  mutate(
+    across(
+      c(grep("PAYAMT", names(default.data)), 
+        grep("BILLAMT", names(default.data)), 
+        "AGE", "LIMIT_BAL"), 
+      as.numeric))
 
 default.data <- default.data %>%
   mutate(
@@ -452,19 +456,135 @@ We can see that there are some data that stands out. For example, in the variabl
 
 Let us clean the data for variables *`EDUCATION`* and *`MARRIAGE`*. Since they have each have a class called `Others`, we can consider replacing the unknown classes with this class.
 
-```{r}
+```{r replace unknown class with others}
+# For EDUCATION
+levels(default.data$EDUCATION)[levels(default.data$EDUCATION) %in% c("0", "5", "6")] <- "4"
 
+# For MARRIAGE
+levels(default.data$MARRIAGE)[levels(default.data$MARRIAGE) == "0"] <- "3"
+
+summary(default.data)
 ```
-
-
 
 We can plot out the variables in a univariate and multivariate plots to visualize how they are distributed and correlate with one another.
 
 ### 4.1.1 Univariate Plots
 
+Using the package **`gridExtra`** allows us to arrange a number of plots into a single page.
 
+```{r load gridExtra package}
+library(gridExtra)
+```
 
+```{r dist of sex_educ_marr_age}
+# For categorical and discrete variables
+sex <- ggplot(data = default.data) +
+  geom_bar(aes(x = SEX, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
 
+education <- ggplot(data = default.data) + 
+  geom_bar(aes(x = EDUCATION, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+marriage <- ggplot(data = default.data) +
+  geom_bar(aes(x = MARRIAGE, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+age <- ggplot(data = default.data) +
+  geom_histogram(aes(x = AGE, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+gridExtra::grid.arrange(sex, education, marriage, age, ncol = 2, nrow = 2)
+```
+
+```{r dist billamt and payamt}
+# For continuous variables
+billamt <- default.data %>%
+  select(grep("BILLAMT", names(default.data)))
+
+payamt <- default.data %>%
+  select(grep("PAYAMT", names(default.data)))
+
+par(mfrow = c(1, 6), mar = c(1, 3, 3, 2))
+for (i in 1:6) {
+  boxplot(billamt[,i], main = names(billamt)[i])
+}
+
+par(mfrow = c(1, 6), mar = c(1, 3, 3, 2))
+for (i in 1:6) {
+  boxplot(payamt[,i], main = names(payamt)[i])
+}
+```
+
+### 4.1.2 Multivariate Plots
+
+Let us visualize the correlation between the variables *`BILLAMT_`* and *`PAYAMT_`*.
+
+```{r corrplot}
+# Correlation matrix for billamt and payamt
+correl <- cor(x = cbind(billamt, payamt), method = "spearman")
+
+corrplot(corr = correl, 
+         method = "color", 
+         type = "lower", 
+         addCoef.col = "black")
+```
+
+We can see that the correlation between *`BILLAMT_`* is very high, which is likely due to the time component involved in these variables. We could expect that if the bill statement in April is high, then the bill statement in May would likely be high as well. However, it seemed that the correlation between the *`PAYAMT_`* is rather moderate. For the correlation between *`BILLAMT_`* and *`PAYAMT_`*, there seems to be a pattern of relatively higher correlation on the diagonals, i.e. between *`BILLAMT_AUG`* and *`PAYAMT_SEP`* or *`BILLAMT_JUL`* and *`PAYAMT_AUG`*. We could expect that the bill statement in July was paid in August and so on. The high correlation between these variables would be an issue when adding them to the logit model and we might want to consider creating new features from these two variables.
+
+### 4.1.3 Creating New Variables
+
+The first variable I created is the average of each observation's *`BILLAMT_`* variables, divided by its *`LIMITT_BAL`*. This new variable would help us determine the average utilization of the credit given to a person.
+
+```{r avg util}
+avg_util <- round(rowMeans(billamt) / default.data$LIMIT_BAL, 4)
+```
+
+The next variable I created takes the average of each observations *`PAYAMT_`* variables, divided by the average of each observations *`BILLAMT_`* variables. This would help us determine how much of the bill statement was paid on average over April to September. However, the calculation would lead to `NaN` or `inf` values, which cannot be handled by the logistic regression formula, so I converted it to `NA` values (which can be handled).
+
+```{r avg pmt bill ratio}
+avg_pmt_bill_ratio <- rowMeans(payamt) / rowMeans(billamt)
+
+sum(is.nan(avg_pmt_bill_ratio)); sum(is.infinite(avg_pmt_bill_ratio))
+
+avg_pmt_bill_ratio <- replace(avg_pmt_bill_ratio, 
+                              is.nan(avg_pmt_bill_ratio) | is.infinite(avg_pmt_bill_ratio), 
+                              NA)
+
+sum(is.nan(avg_pmt_bill_ratio)); sum(is.infinite(avg_pmt_bill_ratio)) # To check
+```
+
+The variables *`PAY_`* has too many categories, and so there was a need to reduce the number of values in this categorical variable. I have decided to only look at the variable *`PAY_SEP`* as it would be the most recent variable available. But before that, I would bind the variables that I need in the regression into a new data frame.
+
+```{r bind variables}
+new_data <- data.frame(default.data[,1:6], avg_util, avg_pmt_bill_ratio, default.data$default)
+
+head(new_data, n = 4)
+```
+
+Looking at the variable *`PAY_SEP`* in a table format, I have reduced the original 11 classes into 2. 0 = those who paid duly/early or delayed payment for one month, 1 = those who delayed payment for two month or more.
+
+```{r table default and paysep}
+table(default.data$default, default.data$PAY_SEP)
+```
+
+```{r changing classes}
+levels(new_data$PAY_SEP)[levels(new_data$PAY_SEP) %in% c("-2", "-1", "0", "1")] <- "0"
+
+levels(new_data$PAY_SEP)[!levels(new_data$PAY_SEP) %in% c("-2", "-1", "0", "1")] <- "1"
+
+summary(new_data)
+```
+
+## 4.2 Building the Models
 
 
 

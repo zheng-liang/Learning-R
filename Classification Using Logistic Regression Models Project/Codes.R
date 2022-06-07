@@ -178,8 +178,6 @@ head(default.data)
 default.data <- default.data[,-1]
 head(default.data)
 
-temp.df <- default.data
-
 ### Renaming columns
 newnames <- c("PAY_SEP","PAY_AUG","PAY_JUL", "PAY_JUN", "PAY_MAY", "PAY_APR",
               "BILLAMT_SEP","BILLAMT_AUG","BILLAMT_JUL", "BILLAMT_JUN", "BILLAMT_MAY", "BILLAMT_APR",
@@ -201,11 +199,13 @@ colnames(default.data)
 str(default.data)
 
 ## Changing to appropriate value type
-temp.df <- default.data # Save to backup
-
-# To make it simple we can change all to numeric first, then to factors
 default.data <- default.data %>% 
-  mutate(across(where(is.character), as.numeric))
+  mutate(
+    across(
+      c(grep("PAYAMT", names(default.data)), 
+        grep("BILLAMT", names(default.data)), 
+        "AGE", "LIMIT_BAL"), 
+      as.numeric))
 
 str(default.data)
 
@@ -218,24 +218,109 @@ default.data <- default.data %>%
 
 str(default.data)
 
-temp.df <- default.data # Save progress of dataset
-
 ## View summary of data
 summary(default.data)
 
 ### Replace unknown class with Others
+# For EDUCATION
+levels(default.data$EDUCATION)[levels(default.data$EDUCATION) %in% c("0", "5", "6")] <- "4"
+# For MARRIAGE
+levels(default.data$MARRIAGE)[levels(default.data$MARRIAGE) == "0"] <- "3"
 
+## Univariate Plots ====
+library(gridExtra)
 
+# For categorical and discrete variables
+sex <- ggplot(data = default.data) +
+  geom_bar(aes(x = SEX, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
 
+education <- ggplot(data = default.data) + 
+  geom_bar(aes(x = EDUCATION, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
 
+marriage <- ggplot(data = default.data) +
+  geom_bar(aes(x = MARRIAGE, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
 
-## Univariate Plots
-ggplot(data = default.data) +
-  geom_bar(aes(x = SEX, fill = default))
+age <- ggplot(data = default.data) +
+  geom_histogram(aes(x = AGE, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
 
-# 
-ggplot(data = default.data) +
-  geom_bar(aes(x = EDUCATION, fill = default))
+gridExtra::grid.arrange(sex, education, marriage, age, ncol = 2, nrow = 2)
+
+# For continuous variables
+billamt <- default.data %>%
+  select(grep("BILLAMT", names(default.data)))
+
+payamt <- default.data %>%
+  select(grep("PAYAMT", names(default.data)))
+
+par(mfrow = c(1, 6), mar = c(1, 3, 3, 2))
+for (i in 1:6) {
+  boxplot(billamt[,i], main = names(billamt)[i])
+}
+
+for (i in 1:6) {
+  boxplot(payamt[,i], main = names(payamt)[i])
+}
+
+## Multivariate Plots ====
+# Correlation matrix for billamt and payamt
+correl <- cor(x = cbind(billamt, payamt), method = "spearman")
+corrplot(corr = correl, 
+         method = "color", 
+         type = "lower", 
+         addCoef.col = "black")
+
+## Creating new variables ====
+# Variable that is the mean bill amount from Apr to Sep divided by limit balance
+avg_util <- round(rowMeans(billamt) / default.data$LIMIT_BAL, 4)
+
+# Variable that is the mean payment amount from Apr to Sep divided by mean bill amount
+avg_pmt_bill_ratio <- rowMeans(payamt) / rowMeans(billamt)
+
+# Regression cannot handle NaN and inf values, so convert to NA
+sum(is.nan(avg_pmt_bill_ratio)); sum(is.infinite(avg_pmt_bill_ratio))
+avg_pmt_bill_ratio <- replace(avg_pmt_bill_ratio, 
+                              is.nan(avg_pmt_bill_ratio) | is.infinite(avg_pmt_bill_ratio), 
+                              NA)
+
+# Convert the pay history status variable
+# I will just use the most recent pay history status available, which is PAY_SEP
+table(default.data$default, default.data$PAY_SEP)
+# I would simplify the number of dummies into 2 groups
+# 0 - those who paid duly/early or delayed payment for one month
+# 1 - those who delayed payment for two month or more
+
+# First let us bind the data that we want into a new data frame
+new_data <- data.frame(default.data[,1:6], avg_util, avg_pmt_bill_ratio, default = default.data$default)
+
+# Change the categorical classes
+levels(new_data$PAY_SEP)[levels(new_data$PAY_SEP) %in% c("-2", "-1", "0", "1")] <- "0"
+
+levels(new_data$PAY_SEP)[!levels(new_data$PAY_SEP) %in% c("-2", "-1", "0", "1")] <- "1"
+
+summary(new_data)
+str(new_data)
+
+# Test to see if numerical variables still have high correlation
+p1 <- hist(new_data$LIMIT_BAL)
+p2 <- hist(new_data$AGE)
+p3 <- hist(new_data$avg_util)
+p4 <- hist(new_data$avg_pmt_bill_ratio)
+
+gridExtra::grid.arrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+
+# Modeling ----
 
 
 
