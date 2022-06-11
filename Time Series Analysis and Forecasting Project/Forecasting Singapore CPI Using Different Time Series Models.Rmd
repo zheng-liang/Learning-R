@@ -1,0 +1,66 @@
+---
+title: "Forecasting Singapore's Consumer Price Index Using Different Time Series Models"
+output:
+  github_document:
+    toc: true
+---
+
+# 1 Introduction
+
+The purpose of this project is to introduce time series modelling and forecasting in R using a practical example. It covers the common tests that are done in time series analysis, such as unit root tests for stationarity, Breusch-Godfrey test for serial correlation, and Granger Causality test for determining relationship between variables.
+
+The data used in this project was obtained from the Department of Statistics Singapore and can be accessed from the [SingStat Table Builder](https://tablebuilder.singstat.gov.sg/).
+
+
+# 2 Packages Required
+
+```{r load packages}
+# Use install.packages("packagename") if they are not already installed
+library(ardl) # For ARDL models
+library(forecast) # For ARIMA models, forecasting and evaluation
+library(lmtest) # For tests such as Breusch-Godfrey, Breusch-Pagan
+library(lubridate) # For working with dates
+library(tidyverse) # For ggplot2 and dplyr
+library(tseries) # For unit root tests
+library(xts) # For converting data to and working with xts objects
+```
+
+# 3 Exploratory Data Analysis
+
+
+
+
+# 4 Unit Root Test for Stationarity
+
+
+
+
+# 5 Engle-Granger Test for Cointegration
+
+
+
+
+# 6 Granger Causality Test
+
+
+
+
+# 7 Model Selection
+
+
+
+
+# 8 Post-Estimation Tests
+
+
+
+
+# 9 Forecasting and Evaluation
+
+
+
+
+# References
+
+
+
