@@ -3,13 +3,28 @@ title: "Forecasting Singapore's Consumer Price Index Using Different Time Series
 output:
   github_document:
     toc: true
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 # 1 Introduction
 
-The purpose of this project is to introduce time series modelling and forecasting in R using a practical example. It covers the common tests that are done in time series analysis, such as unit root tests for stationarity, Breusch-Godfrey test for serial correlation, and Granger Causality test for determining relationship between variables. The main models used in this project are the ARIMA, ARDL and VAR models, which will be discussed in detail in the later sections.
+The purpose of this project is to introduce time series modelling and
+forecasting in R using a practical example. It covers the common tests
+that are done in time series analysis, such as unit root tests for
+stationarity, Breusch-Godfrey test for serial correlation, and Granger
+Causality test for determining relationship between variables. The main
+models used in this project are the ARIMA, ARDL and VAR models, which
+will be discussed in detail in the later sections.
 
-I attempted to forecast Singapore's Consumer Price Index (CPI) using the Producer Price Index (PPI), the Composite Leading Index (CLI) and the Private Consumption Expenditure (PCE). The data used in this project was obtained from the Department of Statistics (DOS) Singapore and can be accessed from the [SingStat Table Builder](https://tablebuilder.singstat.gov.sg/). The data was imported via an API, but it can also be downloaded as an Excel or CSV file. 
+I attempted to forecast Singapore's Consumer Price Index (CPI) using the
+Producer Price Index (PPI), the Composite Leading Index (CLI) and the
+Private Consumption Expenditure (PCE). The data used in this project was
+obtained from the Department of Statistics (DOS) Singapore and can be
+accessed from the [SingStat Table
+Builder](https://tablebuilder.singstat.gov.sg/). The data was imported
+via an API, but it can also be downloaded as an Excel or CSV file.
 
 # 2 Packages Required
 
@@ -34,9 +49,18 @@ library(vars) # For VAR models
 
 # 3 Importing Data Using API
 
-To import data using an API, we need to use the **`GET`** function in the `httr` package. We need to specify a URL to send a request for data retrieval. Websites that has an API usually has their own documentation on how to structure the parameters of the URL. For DOS Singapore, the documentation can be found [here](https://tablebuilder.singstat.gov.sg/view-api/for-developers).
+To import data using an API, we need to use the **`GET`** function in
+the `httr` package. We need to specify a URL to send a request for data
+retrieval. Websites that has an API usually has their own documentation
+on how to structure the parameters of the URL. For DOS Singapore, the
+documentation can be found
+[here](https://tablebuilder.singstat.gov.sg/view-api/for-developers).
 
-I have included the process in detail for retrieving the "[Consumer Price Index, 2019 As Base Year](https://tablebuilder.singstat.gov.sg/table/TS/M212881)" data. For the rest of the variables, I would run the steps in a single R chunk for each variable.
+I have included the process in detail for retrieving the "[Consumer
+Price Index, 2019 As Base
+Year](https://tablebuilder.singstat.gov.sg/table/TS/M212881)" data. For
+the rest of the variables, I would run the steps in a single R chunk for
+each variable.
 
 ```{r cpi url}
 cpi_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M212881?isTestApi=true&seriesNoORrowNo=1"
@@ -44,7 +68,8 @@ cpi_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M212881?isT
 raw_cpi <- httr::GET(url = cpi_url)
 ```
 
-It has returned a list object which we can further explore by calling `raw_cpi`.
+It has returned a list object which we can further explore by calling
+`raw_cpi`.
 
 ```{r explore rawdata}
 raw_cpi
@@ -54,9 +79,17 @@ names(raw_cpi)
 head(raw_cpi$content)
 ```
 
-The `Status: 200` tells us that the operation was successful. If it returned the number 400 or 404, it would mean that there are errors in our query or the resource could not be found. The `Content-Type` tells us that the data takes on a JSON format, which is why the `jsonlite` package was needed.
+The `Status: 200` tells us that the operation was successful. If it
+returned the number 400 or 404, it would mean that there are errors in
+our query or the resource could not be found. The `Content-Type` tells
+us that the data takes on a JSON format, which is why the `jsonlite`
+package was needed.
 
-Using the **`names`** function, we can find out what is in the `raw_cpi` list. The most important part we need is in the `content`, which is not useful until we convert it to text in a JSON format. To do this, we need the **`rawToChar`** in base R and **`fromJSON`** function in the `jsonlite` package.
+Using the **`names`** function, we can find out what is in the `raw_cpi`
+list. The most important part we need is in the `content`, which is not
+useful until we convert it to text in a JSON format. To do this, we need
+the **`rawToChar`** in base R and **`fromJSON`** function in the
+`jsonlite` package.
 
 ```{r convert to text}
 cpi <- jsonlite::fromJSON(rawToChar(raw_cpi$content))
@@ -66,7 +99,11 @@ names(cpi)
 lapply(cpi, FUN = class)
 ```
 
-Using the **`names`** function on the resulting `cpi` list, we can find the elements in the list and we are interested in the `Data` element. Using the **`lapply`** function and indicating **`FUN = class`**, it returned the classes of the elements in the list. Let us dig deeper into the `Data` element.
+Using the **`names`** function on the resulting `cpi` list, we can find
+the elements in the list and we are interested in the `Data` element.
+Using the **`lapply`** function and indicating **`FUN = class`**, it
+returned the classes of the elements in the list. Let us dig deeper into
+the `Data` element.
 
 ```{r data element}
 names(cpi$Data)
@@ -76,9 +113,20 @@ names(cpi$Data$row)
 head(lapply(cpi$Data$row$columns, head))
 ```
 
-The `Data` list consists of the type of data and some of the values in each element. The elements `id`, `title`, `frequency`, etc. are the parameters or metadata from the API query. What we need is the `row` element. The `seriesNo` and `rowText `represents the class and sub-classes of items in the CPI basket, for example 1 refers to All Items, 1.0 refers to Food, and 1.1 refers to Food Excl Food Serving Services, etc. For our analysis, I am interested in the CPI - All Items, and due to a parameter in our URL specifying to only return the values under this category, we only have data for it as can be seen in the `columns` element. Due to the size of the `columns` list, I had to use the **`head`** function to simplify the output.
+The `Data` list consists of the type of data and some of the values in
+each element. The elements `id`, `title`, `frequency`, etc. are the
+parameters or metadata from the API query. What we need is the `row`
+element. The `seriesNo` and `rowText`represents the class and
+sub-classes of items in the CPI basket, for example 1 refers to All
+Items, 1.0 refers to Food, and 1.1 refers to Food Excl Food Serving
+Services, etc. For our analysis, I am interested in the CPI - All Items,
+and due to a parameter in our URL specifying to only return the values
+under this category, we only have data for it as can be seen in the
+`columns` element. Due to the size of the `columns` list, I had to use
+the **`head`** function to simplify the output.
 
-Working with list of lists can be troublesome, so it would a good idea to convert it into a data frame (at least for now).
+Working with list of lists can be troublesome, so it would a good idea
+to convert it into a data frame (at least for now).
 
 ```{r convert to df}
 cpi_data <- as.data.frame(cpi$Data$row$columns[[1]])
@@ -90,7 +138,10 @@ Let us take a look at `cpi_data`.
 head(cpi_data, n = 4); tail(cpi_data, n = 4)
 ```
 
-We can see that the order of the data is based on the time observations but on the character values of the dates. To reorder the observations, we can use the functions in the **`lubridate`** and **`dplyr`** packages.
+We can see that the order of the data is based on the time observations
+but on the character values of the dates. To reorder the observations,
+we can use the functions in the **`lubridate`** and **`dplyr`**
+packages.
 
 ```{r reordering date}
 cpi_data <- cpi_data %>% 
@@ -99,9 +150,11 @@ cpi_data <- cpi_data %>%
 head(cpi_data, n = 4); tail(cpi_data, n = 4)
 ```
 
-I have simplified the steps for data retrieval and conversion into data frame for the other variables of interest.
+I have simplified the steps for data retrieval and conversion into data
+frame for the other variables of interest.
 
-[Domestic Supply Price Index, By Commodity Section (1-Digit Level), Base Year 2018 = 100](https://tablebuilder.singstat.gov.sg/table/TS/M212701):
+[Domestic Supply Price Index, By Commodity Section (1-Digit Level), Base
+Year 2018 = 100](https://tablebuilder.singstat.gov.sg/table/TS/M212701):
 
 ```{r dspi}
 dspi_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M212701?isTestApi=true&seriesNoORrowNo=1"
@@ -118,7 +171,8 @@ dspi_data <- dspi_data %>%
 head(dspi_data, n = 4); tail(dspi_data, n = 4)
 ```
 
-[Composite Leading Index (2015 = 100)](https://tablebuilder.singstat.gov.sg/table/TS/M240421):
+[Composite Leading Index (2015 =
+100)](https://tablebuilder.singstat.gov.sg/table/TS/M240421):
 
 ```{r cli}
 cli_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M240421?isTestApi=true"
@@ -134,7 +188,9 @@ cli_data <- as.data.frame(cli$Data$row$columns[[1]])
 head(cli_data, n = 4); tail(cli_data, n = 4)
 ```
 
-Private Consumption Expenditure in [Expenditure On Gross Domestic Product In Chained (2015) Dollars](https://tablebuilder.singstat.gov.sg/table/TS/M014811)
+Private Consumption Expenditure in [Expenditure On Gross Domestic
+Product In Chained (2015)
+Dollars](https://tablebuilder.singstat.gov.sg/table/TS/M014811)
 
 ```{r pce}
 pce_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M014811?isTestApi=true"
@@ -153,7 +209,15 @@ head(pce_data, n = 4); tail(pce_data, n = 4)
 
 # 4 Exploratory Data Analysis
 
-In this section, I provided more details about each variable and generated univariate and multivariate plots to find patterns in and interaction between the variables. To visualize the plots, rather than using a data frame object, it is best to convert them into an `xts` object. The conversion requires two arguments. First is the vector or matrix to be converted to xts object and a vector of the date. We have the dates in the data frame but they are not formatted as dates, so I used the **`yearmon`** and **`yearqtr`** functions to format them to the appropriate types.
+In this section, I provided more details about each variable and
+generated univariate and multivariate plots to find patterns in and
+interaction between the variables. To visualize the plots, rather than
+using a data frame object, it is best to convert them into an `xts`
+object. The conversion requires two arguments. First is the vector or
+matrix to be converted to xts object and a vector of the date. We have
+the dates in the data frame but they are not formatted as dates, so I
+used the **`yearmon`** and **`yearqtr`** functions to format them to the
+appropriate types.
 
 ```{r convert df to xts}
 cpi.xts <- xts(x = cpi_data$value, 
@@ -173,7 +237,10 @@ pce.xts <- xts(x = pce_data$value,
   `colnames<-`("PCE")
 ```
 
-Since the values were stored as characters, I converted them to numeric so that it can be properly analyzed. Unlike the normal data frame, we cannot use **`as.numeric`** function to convert the variable type to numeric. Instead, we need to use **`storage.mode`**.
+Since the values were stored as characters, I converted them to numeric
+so that it can be properly analyzed. Unlike the normal data frame, we
+cannot use **`as.numeric`** function to convert the variable type to
+numeric. Instead, we need to use **`storage.mode`**.
 
 ```{r convert value to numeric}
 storage.mode(cpi.xts) <- "numeric"
@@ -187,9 +254,23 @@ storage.mode(pce.xts) <- "numeric"
 
 ## 4.1 Consumer Price Index
 
-One of the widely-known and most watched indicator is the CPI as it can be used to determine the general inflation in a country. Inflation basically refers to the increase in general price levels of goods and services. Deflation (or negative inflation) would mean that the general price level of goods and services has fallen. The CPI measures the average price level of a basket of goods and services consumed by households, and the basket of goods is updated every five years in Singapore to better reflect the changing consumption habits. Due to the importance of the indicator, many economists in government or private business settings attempt to forecast it to formulate economic policies or business/investment decisions.
+One of the widely-known and most watched indicator is the CPI as it can
+be used to determine the general inflation in a country. Inflation
+basically refers to the increase in general price levels of goods and
+services. Deflation (or negative inflation) would mean that the general
+price level of goods and services has fallen. The CPI measures the
+average price level of a basket of goods and services consumed by
+households, and the basket of goods is updated every five years in
+Singapore to better reflect the changing consumption habits. Due to the
+importance of the indicator, many economists in government or private
+business settings attempt to forecast it to formulate economic policies
+or business/investment decisions.
 
-`cpi.xts` contained 736 monthly observations from January 1961 to April 2022. However, I would need to adjust this variable as the Composite Leading Index starts from 1978 and it is a quarterly series. For time series analysis to work, we need the variables to have same time interval.
+`cpi.xts` contained 736 monthly observations from January 1961 to April
+2022. However, I would need to adjust this variable as the Composite
+Leading Index starts from 1978 and it is a quarterly series. For time
+series analysis to work, we need the variables to have same time
+interval.
 
 ```{r convert cpi to qtrly}
 cpi_q.xts <- xts::apply.quarterly(cpi.xts, FUN = mean)
@@ -204,13 +285,20 @@ tclass(cpi_q.xts) <- "yearqtr"
 cpi_q.xts <- cpi_q.xts["1978-01/2022-03"]
 ```
 
-I have plotted the cleaned `cpi_q.xts`, which shows how the CPI has changed over time. We can see that the series is non-stationary, which could probably be solved by taking the first difference on the data. More about this in the next section. 
+I have plotted the cleaned `cpi_q.xts`, which shows how the CPI has
+changed over time. We can see that the series is non-stationary, which
+could probably be solved by taking the first difference on the data.
+More about this in the next section.
 
 ```{r plot cpi}
 plot.xts(cpi_q.xts, main = "Singapore Quarterly CPI from 1978Q1 to 2022Q1")
 ```
 
-I have also generated a boxplot of the range of CPI values of all years grouped by the quarters. It is hard to say if there are any differences between the quarters to indicate an effect of seasonality. However, since the data obtained was not seasonally-adjusted, we might want to consider adding seasonal dummies to our time series model.
+I have also generated a boxplot of the range of CPI values of all years
+grouped by the quarters. It is hard to say if there are any differences
+between the quarters to indicate an effect of seasonality. However,
+since the data obtained was not seasonally-adjusted, we might want to
+consider adding seasonal dummies to our time series model.
 
 ```{r seasonality in cpi}
 boxplot(cpi_q.xts ~ cycle(cpi_q.xts),
@@ -220,17 +308,27 @@ boxplot(cpi_q.xts ~ cycle(cpi_q.xts),
 
 ## 4.2 Domestic Supply Price Index
 
-There are 3 different measurements of the PPI in Singapore, namely the Domestic Supply Price Index, the Singapore Manufactured Products Price Index and the Services Producer Price Index. Here are the descriptions of each index:
+There are 3 different measurements of the PPI in Singapore, namely the
+Domestic Supply Price Index, the Singapore Manufactured Products Price
+Index and the Services Producer Price Index. Here are the descriptions
+of each index:
 
-| Index    | Description                    |
-|----------|--------------------------------|
-|DSPI      | Monitors the price changes of locally manufactured goods and imports which are retained for use in the domestic economy. It gives an indication of the price trends of goods used in the domestic economy. |
-|SMPPI     | Measures the changes in the prices of goods produced by manufacturers in Singapore for sale in the domestic and international markets. |
-|SPPI      | Contains indices of different services: Accounting Services Price Index, Cargo Handling Price Index, Computer Consultancy and Information Services Price Index, Freight Forwarding Price Index, Sea Freight Transport Price Index, Warehousing and Storage Price Index. |
+| Index | Description                                                                                                                                                                                                                                                             |
+|------------------|------------------------------------------------------|
+| DSPI  | Monitors the price changes of locally manufactured goods and imports which are retained for use in the domestic economy. It gives an indication of the price trends of goods used in the domestic economy.                                                              |
+| SMPPI | Measures the changes in the prices of goods produced by manufacturers in Singapore for sale in the domestic and international markets.                                                                                                                                  |
+| SPPI  | Contains indices of different services: Accounting Services Price Index, Cargo Handling Price Index, Computer Consultancy and Information Services Price Index, Freight Forwarding Price Index, Sea Freight Transport Price Index, Warehousing and Storage Price Index. |
 
-The index I am interested in is the DSPI since it measures the prices of goods used in the domestic economy, including goods that were imported. It may give a better measure of the PPI, since these are the costs affecting the domestic manufacturers and would flow down the supply chain and affect the domestic end-consumers. We would expect that if PPI increases, CPI would increase as well.
+The index I am interested in is the DSPI since it measures the prices of
+goods used in the domestic economy, including goods that were imported.
+It may give a better measure of the PPI, since these are the costs
+affecting the domestic manufacturers and would flow down the supply
+chain and affect the domestic end-consumers. We would expect that if PPI
+increases, CPI would increase as well.
 
-Similar to `cpi.xts`, `dspi.xts` 580 monthly observations from January 1974 to April 2022. We would need to adjust the time interval to match the CLI data.
+Similar to `cpi.xts`, `dspi.xts` 580 monthly observations from January
+1974 to April 2022. We would need to adjust the time interval to match
+the CLI data.
 
 ```{r convert and subset dspi qtrly}
 dspi_q.xts <- xts::apply.quarterly(dspi.xts, FUN = mean)
@@ -240,13 +338,18 @@ tclass(dspi_q.xts) <- "yearqtr"
 dspi_q.xts <- dspi_q.xts["1978-01/2022-03"]
 ```
 
-Based on the plot of `dspi_q.xts`, the Singapore DSPI has ranged from a minimum of about 80 to a maximum of about 130. This is unlike the CPI chart that we saw earlier that had a clear upward trend. 
+Based on the plot of `dspi_q.xts`, the Singapore DSPI has ranged from a
+minimum of about 80 to a maximum of about 130. This is unlike the CPI
+chart that we saw earlier that had a clear upward trend.
 
 ```{r plot dspi}
 plot.xts(dspi_q.xts, main = "Singapore Quarterly DSPI from 1978Q1 to 2022Q1")
 ```
 
-Looking at the boxplot of the `dspi_q.xts` grouped by quarters, we can see some variation across quarters, which may indicate that seasonality is present. Based on the boxplot, the DSPI is generally lower in fourth quarter of each year than in other quarters. 
+Looking at the boxplot of the `dspi_q.xts` grouped by quarters, we can
+see some variation across quarters, which may indicate that seasonality
+is present. Based on the boxplot, the DSPI is generally lower in fourth
+quarter of each year than in other quarters.
 
 ```{r seasonality in dspi}
 boxplot(dspi_q.xts ~ cycle(dspi_q.xts),
@@ -256,19 +359,21 @@ boxplot(dspi_q.xts ~ cycle(dspi_q.xts),
 
 ## 4.3 Composite Leading Index
 
-The CLI is a leading indicator to predict market expansions and slowdowns. It aggregates the following nine indicators: 
+The CLI is a leading indicator to predict market expansions and
+slowdowns. It aggregates the following nine indicators:
 
-* Total New Companies Formed
-* Money Supply (M2)
-* Stock Exchange of Singapore Indices
-* Business Expectations for Wholesale Trade
-* Business Expectations for Stock of Finished Goods (Manufacturing)
-* US Purchasing Managers’ Index (Manufacturing)
-* Total Non-oil Seaborne Cargo Handled
-* Domestic Liquidity Indicator
-* Total Non-oil Retained Imports
+-   Total New Companies Formed
+-   Money Supply (M2)
+-   Stock Exchange of Singapore Indices
+-   Business Expectations for Wholesale Trade
+-   Business Expectations for Stock of Finished Goods (Manufacturing)
+-   US Purchasing Managers’ Index (Manufacturing)
+-   Total Non-oil Seaborne Cargo Handled
+-   Domestic Liquidity Indicator
+-   Total Non-oil Retained Imports
 
-We could expect that if the CLI indicates a market upturn(downturn), CPI would increase(decrease).
+We could expect that if the CLI indicates a market upturn(downturn), CPI
+would increase(decrease).
 
 ```{r plot cli}
 plot.xts(cli.xts, main = "Singapore Quarterly CLI from 1978Q1 to 2022Q1")
@@ -276,21 +381,31 @@ plot.xts(cli.xts, main = "Singapore Quarterly CLI from 1978Q1 to 2022Q1")
 
 ## 4.4 Private Consumption Expenditure
 
-The PCE measures the final purchases of goods and services by resident households including non-profit institutions serving households. We may expect that higher PCE would lead to higher CPI as households demand more goods and services, while lower PCE would lead to lower CPI because of reduced spending by households, creating a gap in demand and supply.
+The PCE measures the final purchases of goods and services by resident
+households including non-profit institutions serving households. We may
+expect that higher PCE would lead to higher CPI as households demand
+more goods and services, while lower PCE would lead to lower CPI because
+of reduced spending by households, creating a gap in demand and supply.
 
-I have taken the log on PCE so that the range of values are smaller, This also tends to reduce the effect of outliers on the data.
+I have taken the log on PCE so that the range of values are smaller,
+This also tends to reduce the effect of outliers on the data.
 
 ```{r subset pce}
 pce.xts <- log(pce.xts["1978-01/"]) # indicate to subset from 1978 Jan to last date
 ```
 
-The plot of `pce.xts` shows an upward trend over time, which means it is not stationary. The sharp drop in PCE in 2020 was due to the Covid-19 outbreak resulting in lowered household expenditure.
+The plot of `pce.xts` shows an upward trend over time, which means it is
+not stationary. The sharp drop in PCE in 2020 was due to the Covid-19
+outbreak resulting in lowered household expenditure.
 
 ```{r plot pce}
 plot.xts(pce.xts, main = "Singapore Quarterly (Log) PCE from 1978Q1 to 2022Q1")
 ```
 
-It is difficult to see if there are any seasonality effects in the PCE data using the boxplot visualization. However, since the data imported was not seasonally adjusted, it might be better to include seasonal dummies if this was the independent variable.
+It is difficult to see if there are any seasonality effects in the PCE
+data using the boxplot visualization. However, since the data imported
+was not seasonally adjusted, it might be better to include seasonal
+dummies if this was the dependent variable.
 
 ```{r seasonality in pce}
 boxplot(pce.xts ~ cycle(pce.xts),
@@ -300,7 +415,12 @@ boxplot(pce.xts ~ cycle(pce.xts),
 
 ## 4.5 Multivariate Analysis
 
-Before conducting a multivariate analysis, it would be better to merge our data into a single object. To do this, we need the **`merge`** function. However, as we can see there seems to be a problem, as there are two rows for each quarter in the year. This is because CPI and DSPI considered the quarter to be on March, June, September and December due to the adjustment we did previously. 
+Before conducting a multivariate analysis, it would be better to merge
+our data into a single object. To do this, we need the **`merge`**
+function. However, as we can see there seems to be a problem, as there
+are two rows for each quarter in the year. This is because CPI and DSPI
+considered the quarter to be on March, June, September and December due
+to the adjustment we did previously.
 
 ```{r merge data}
 data <- merge(cpi_q.xts, dspi_q.xts, cli.xts, pce.xts)
@@ -308,7 +428,11 @@ data <- merge(cpi_q.xts, dspi_q.xts, cli.xts, pce.xts)
 head(data)
 ```
 
-To resolve this, we can use the **`na.locf`** function to replace the NAs with the last observation. We can do this on the CLI and PCE columns, and use the **`na.omit`** function to remove rows with NAs in the CPI and DSPI columns. This would remove the duplication of the quarters in each year.
+To resolve this, we can use the **`na.locf`** function to replace the
+NAs with the last observation. We can do this on the CLI and PCE
+columns, and use the **`na.omit`** function to remove rows with NAs in
+the CPI and DSPI columns. This would remove the duplication of the
+quarters in each year.
 
 ```{r clean data}
 data[, 3:4] <- na.locf(data[, 3:4])
@@ -318,7 +442,12 @@ data <- na.omit(data)
 head(data); dim(data)
 ```
 
-So now we have 177 quarterly observations and 4 variables, which is correct. I have plotted a scatterplot matrix of the variables in `data`. We can see a clear pattern between CPI and CLI and PCE, but not so with DSPI. However, this is because we could see a clear upward trend in CPI, CLI and PCE when plotted on a chart, but DSPI had a ranging pattern. The correlation matrix plot also shows how the variables are correlated.
+So now we have 177 quarterly observations and 4 variables, which is
+correct. I have plotted a scatterplot matrix of the variables in `data`.
+We can see a clear pattern between CPI and CLI and PCE, but not so with
+DSPI. However, this is because we could see a clear upward trend in CPI,
+CLI and PCE when plotted on a chart, but DSPI had a ranging pattern. The
+correlation matrix plot also shows how the variables are correlated.
 
 ```{r scatplot data}
 pairs( ~ CPI + DSPI + CLI + PCE,
@@ -339,7 +468,13 @@ corrplot(correl,
 
 # 5 Splitting Data Into Training and Testing Sets.
 
-Before we continue with any serious analysis, it would be better to split our data into training and testing sets. The training set will be used to create our models, while the testing set will be used to evaluate our models on out-of-sample prediction. Unlike cross-sectional data, the splitting of the data can only happen at a certain observation and not randomly selected to preserve the stochastic process of the observations.
+Before we continue with any serious analysis, it would be better to
+split our data into training and testing sets. The training set will be
+used to create our models, while the testing set will be used to
+evaluate our models on out-of-sample prediction. Unlike cross-sectional
+data, the splitting of the data can only happen at a certain observation
+and not randomly selected to preserve the stochastic process of the
+observations.
 
 ```{r split data}
 train <- data["/2019"]
@@ -349,15 +484,31 @@ test <- data["2020/"]
 
 # 6 Unit Root Test for Stationarity
 
-Now that we have a better understanding of our variables, we can proceed with the actual time series analysis. However, the first thing to do before modelling is to check that the variables are stationary.
+Now that we have a better understanding of our variables, we can proceed
+with the actual time series analysis. However, the first thing to do
+before modelling is to check that the variables are stationary.
 
-Stationarity of variables is an important condition in most time series models. Regression with non-stationary variables can lead to spurious results. Time series are said to be stationary if they have a constant mean, constant variance and the covariance between observations $h$ periods apart depends on $h$. This type of stationarity is called covariance (weak) stationarity.
+Stationarity of variables is an important condition in most time series
+models. Regression with non-stationary variables can lead to spurious
+results. Time series are said to be stationary if they have a constant
+mean, constant variance and the covariance between observations $h$
+periods apart depends on $h$. This type of stationarity is called
+covariance (weak) stationarity.
 
-A common test for stationarity is the Augmented Dickey-Fuller (ADF) unit root test. The null hypothesis claims that there is unit root in the series and hence it is non-stationary, while the alternative hypothesis claims that there is no unit root in the series. 
+A common test for stationarity is the Augmented Dickey-Fuller (ADF) unit
+root test. The null hypothesis claims that there is unit root in the
+series and hence it is non-stationary, while the alternative hypothesis
+claims that there is no unit root in the series.
 
-If a series is non-stationary, it is common to take the first difference (i.e. $y_t$ - $y_{t-1}$) or the natural log on the series. By taking the first difference, we now have an I(1) series or we can say that the variable is integrated of order 1. The original series is I(0), or at levels.
+If a series is non-stationary, it is common to take the first difference
+(i.e. $y_t$ - $y_{t-1}$) or the natural log on the series. By taking the
+first difference, we now have an I(1) series or we can say that the
+variable is integrated of order 1. The original series is I(0), or at
+levels.
 
-I performed the ADF test on the four variables in the `data` object, firstly on the variables at levels, then at first differences. The **`urca`** package has the **`ur.df`** function that we need.
+I performed the ADF test on the four variables in the `data` object,
+firstly on the variables at levels, then at first differences. The
+**`urca`** package has the **`ur.df`** function that we need.
 
 ```{r adf cpi level}
 # Indicate type = "trend" as there was an upward trend in the series
@@ -369,7 +520,15 @@ adf_cpi@teststat; adf_cpi@cval
 summary(adf_cpi)
 ```
 
-The most important values are the test-statistic and the critical values, which we can simply obtain with **`@teststat`** and **`@cval`** after the object name. Using **`summary`** produces the full output, which we did not really need. There are many values in the test-statistic and critical value section of the output, but we only need the first value (-2.1203 in teststat vs -3.43 in cval). We do not reject the null hypothesis at 5% significance level (ADF test is a one-sided test, so the absolute value of test statistic needs to be greater than absolute value of critical value).
+The most important values are the test-statistic and the critical
+values, which we can simply obtain with **`@teststat`** and **`@cval`**
+after the object name. Using **`summary`** produces the full output,
+which we did not really need. There are many values in the
+test-statistic and critical value section of the output, but we only
+need the first value (-2.1203 in teststat vs -3.43 in cval). We do not
+reject the null hypothesis at 5% significance level (ADF test is a
+one-sided test, so the absolute value of test statistic needs to be
+greater than absolute value of critical value).
 
 ```{r adf dspi level}
 adf_dspi <- ur.df(train$DSPI, type = "trend", selectlags = "AIC")
@@ -389,7 +548,12 @@ adf_pce <- ur.df(train$PCE, type = "trend", selectlags = "AIC")
 adf_pce@teststat; adf_pce@cval
 ```
 
-We do not reject the null hypothesis that DSPI and PCE contain unit root, but we reject that the null hypothesis that CLI contains unit root. This indicates that CLI has a form of trend stationarity, and removing the trend from the series (aka de-trending) would make it stationary. However, we can try to take the first difference on these variables and check if the trend still exists.
+We do not reject the null hypothesis that DSPI and PCE contain unit
+root, but we reject that the null hypothesis that CLI contains unit
+root. This indicates that CLI has a form of trend stationarity, and
+removing the trend from the series (aka de-trending) would make it
+stationary. However, we can try to take the first difference on these
+variables and check if the trend still exists.
 
 ```{r diff data}
 diff.train <- diff(train) %>%
@@ -407,7 +571,9 @@ for (i in 1:4) {
 }
 ```
 
-The following R chunks performs the ADF test on the first-differenced variables. Because we have taken the first difference, there is no need to include trend option in ADF test.
+The following R chunks performs the ADF test on the first-differenced
+variables. Because we have taken the first difference, there is no need
+to include trend option in ADF test.
 
 ```{r adf dcpi}
 adf_d.cpi <- ur.df(diff.train$d.CPI, selectlags = "AIC")
@@ -433,9 +599,13 @@ adf_d.pce <- ur.df(diff.train$d.PCE, selectlags = "AIC")
 adf_d.pce@teststat; adf_d.pce@cval
 ```
 
-Since the ADF tau-statistic for all variables are less than the critical tau-value, we can reject the null hypothesis and conclude that the series are I(1) variables (stationary at first difference).
+Since the ADF tau-statistic for all variables are less than the critical
+tau-value, we can reject the null hypothesis and conclude that the
+series are I(1) variables (stationary at first difference).
 
-After taking the first difference, we can see that the interaction between variables have changed in the scatterplot matrix and the correlation matrix.
+After taking the first difference, we can see that the interaction
+between variables have changed in the scatterplot matrix and the
+correlation matrix.
 
 ```{r scatplot diff train}
 pairs(~ d.CPI + d.DSPI + d.CLI + d.PCE, 
@@ -455,46 +625,249 @@ corrplot(correldiff,
 
 # 7 Johansen Test for Cointegration
 
-When we have I(1) variables, there are a few choices presented for modelling. Even though the variables are non-stationary at levels, if they have a cointegrating relationship, we can estimate a Vector Error Correction Model (VECM). Using VECM allows us to model long-run relationships between the variables. However, if they do not have a cointegrating relationship, we can only estimate a short-run model using the Vector Autoregressive (VAR) or Autoregressive Distributed Lag (ARDL) models.
+When we have I(1) variables, there are a few choices presented for
+modelling. Even though the variables are non-stationary at levels, if
+they have a cointegrating relationship, we can estimate a Vector Error
+Correction Model (VECM). Using VECM allows us to model long-run
+relationships between the variables. However, if they do not have a
+cointegrating relationship, we can only estimate a short-run model using
+the Vector Autoregressive (VAR) or Autoregressive Distributed Lag (ARDL)
+models.
 
-To test for cointegration of multivariate time series, I have used the Johansen Test using the **`ca.jo`** function in the **`urca`** package. One of the arguments required is to specify the lag order of the level series in the VAR model. This can be determined using the **`VARselect`** function in the **`vars`** package.
+To test for cointegration of multivariate time series, I have used the
+Johansen Test using the **`ca.jo`** function in the **`urca`** package.
+One of the arguments required is to specify the lag order of the level
+series in the VAR model. This can be determined using the
+**`VARselect`** function in the **`vars`** package.
 
 ```{r lag for jo test}
 # Use the data at levels, not at first difference
-lagselect <- vars::VARselect(train, lag.max = 8, type = "const", season = 4)
+lagselect <- vars::VARselect(train, lag.max = 4, type = "const", season = 4)
 
 lagselect$selection 
 ```
 
-To be constant throughout the project, I would use the AIC to select the number of lags. The returned result showed that 5 lags was chosen by the AIC model, which will be used in our Johansen Test.
+To be constant throughout the project, I would use the AIC to select the
+number of lags. The returned result showed that 5 lags was chosen by the
+AIC model, which will be used in our Johansen Test.
 
 ```{r jo test trace}
-jotest <- urca::ca.jo(x = train, type = "trace", ecdet = "const", K = 5, season = 4)
+jotest <- urca::ca.jo(x = train, type = "trace", ecdet = "const", K = 2, season = 4)
 
 summary(jotest)
 ```
 
 The test results are read starting from:
 
-1. r = 0: value under test column is more that value under 5pct column, statistically significant and we have at least one cointegrating relationship.
+1.  r = 0: value under test column is more than value under 5pct column
+    (statistically significant) and we have at least one cointegrating
+    relationship.
 
-2. r <= 1: value under test column is more that value under 5pct column, statistically significant and we have more than one cointegrating relationship.
+2.  r \<= 1: value under test column is more than value under 5pct
+    column (statistically significant) and we have more than one
+    cointegrating relationship.
 
-3. r <= 2: value under test column is less that value under 5pct column, statistically insignificant and we have at most two cointegrating relationship.
+3.  r \<= 2: value under test column is more than value under 5pct
+    column (statistically significant) and we have more than two
+    cointegrating relationship.
 
+4.  r \<= 3: value under test column is less than value under 5pct
+    column (statistically insignificant) and we have at most three
+    cointegrating relationship.
 
-
-
-
-
+Since we have found cointegrating relationships through the Johansen
+Test, we can estimate a VECM model.
 
 # 8 Granger Causality Test
 
-Using the Granger Causality Test, we can statistically determine if a series can be used predict values of another series better than solely using its past values. Despite the name, it should not be used to determine real causal relationships between variables. It can be a useful test to determine if variables should be added to a time series model to improve forecasting accuracy.
-
-
+Using the Granger Causality Test, we can statistically determine if a
+series can be used predict values of another series better than solely
+using its past values. Despite the name, it should not be used to
+determine real causal relationships between variables. It can be a
+useful test to determine if variables should be added to a time series
+model to improve forecasting accuracy.
 
 # 9 Model Selection
+
+In this section, I discussed the different possible time series models
+that can be created from our data.
+
+## 9.1 Autoregressive (Integrated) Moving Average Model
+
+The AR(I)MA model consists of two parts, an autoregressive (AR) model
+and a moving average (MA) model. Integrated refers to the number of
+differencing needed to achieve stationary time series.
+
+An AR(p) model means that $y_t$ depends on p lags of $y$. In other
+words, we believe that up to the $p$ historical value of $y$ can explain
+$y_t$. The function is written as: 
+
+$$
+y_t = \alpha + \sum_{i = 1}^p \alpha_i y_{t-i} + u_t
+$$ 
+
+A MA(q) model means that $y_t$ depends on q lags of its error terms.
+In other words, we believe that up to $q$ historical value of $u$ (the
+error term) can explain $y_t$. The function is written as: 
+
+$$
+y_t = \alpha + u_t + \sum_{j=1}^q \beta_j u_{t-j}
+$$
+
+An ARMA(p, q) model the combination of AR(p) and MA(q) models. The
+function is written as: 
+
+$$
+y_t = \alpha + \sum_{i = 1}^p \alpha_i y_{t-i} + u_t + \sum_{j=1}^q \beta_j u_{t-j}
+$$ 
+
+This can be written simply as ARIMA(p, d, q). In Section 6, I had
+tested that the CPI series is an I(1) series, which means it is
+stationary at first difference. Therefore, we have an ARIMA(p, 1, q)
+model. The p and q lags are determined in various ways. Firstly, it is
+common to use the autocorrelation and partial autocorrelation function
+to determine the lag order. The functions **`Acf`** and **`Pacf`** in
+the **`forecast`** package can plot the ACF and PACF.
+
+```{r acf pacf}
+par(mfrow = c(2,1), mar = c(2, 2, 4, 2))
+
+forecast::Acf(x = diff.train$d.CPI, main = "ACF of d.CPI")
+
+forecast::Pacf(x = diff.train$d.CPI, main = "PACF of d.CPI")
+```
+
+We can gauge/estimate the q lags of the error term using the ACF where
+spikes are above the blue dotted line and similarly, p lags of the
+dependent variable using the PACF. Usually, the first spike in the ACF
+plot refers to lag 0, but the **`forecast`** package removes and we can
+use the first spike as lag 1 instead. In this case, we might want to try
+to fit a ARIMA(1, 1, 4) model using the **`Arima`** function in **`forecast`** package.
+
+```{r arima114}
+# order refers to the (p,d,q) of the ARIMA model
+# method for estimation is to use maximum likelihood
+
+arima1 <- forecast::Arima(train$CPI, 
+                          order = c(1, 1, 4), 
+                          include.constant = T,
+                          method = "ML")
+
+summary(arima1)
+```
+
+The output shows the coefficients of the lagged variables in the ARIMA model. It should be noted that the mean value is the mean of the series (not the sample mean, but calculated with the log-likelihood). To convert to the constant value, we multiply the mean by $(1-0.7090)$, basically coefficient of the AR terms.
+
+We can write our model as:
+
+$$
+y_t = 0.097 + 0.7090y_{t-1} - 0.3086u_{t-1} - 0.0016u_{t-2} - 0.0469u_{t-3} + 0.0463u_{t-4}
+$$
+
+How well does our manually selected model compare against a model selected automatically using the lowest Akaike Information Criterion? We can estimate such a model using the **`auto.arima`** function. We have many arguments that we should include: `seasonal` should be set to False since I am not estimating a seasonal ARIMA (more on this later), `stepwise` and `approximation` should be set to False to obtain a more accurate model selection, `ic` set to AIC, and `trace` set to False to suppress the running of the models by the automatic selection.
+
+```{r auto arima}
+arima2 <- forecast::auto.arima(train$CPI, 
+                               seasonal = F, 
+                               ic = "aic", 
+                               stepwise = F, 
+                               approximation = F,
+                               trace = F,
+                               method = "ML")
+
+summary(arima2)
+```
+
+We can see that the model automatically selected using the lowest AIC is the different from the one I had manually coded into the **`Arima`** function. The `arima2` model had a lower AIC and had a slightly higher log-likelihood than the `arima1` model. I plotted the actual CPI values and the fitted values based on the two ARIMA models to visualize how well the model fits.
+
+```{r plot arima}
+# indicated xlim and ylim to zoom into the chart to have a better view of the patterns
+plot(as.ts(train$CPI),
+     col = "darkblue", type = "l", lwd = 2,
+     ylab = "CPI Value", main = "Actual vs Fitted CPI Using ARIMA",
+     xlim = c(25, 42), ylim = c(75, 105))
+
+lines(arima1$fitted, col = "red", type = "l", lwd = 2)
+
+lines(arima2$fitted, col = "darkgray", type = "l", lwd = 2)
+
+abline(h = arima2$coef[4], col = "black", lwd = 2)
+
+legend(x = "topleft", legend = c("Actual CPI", "arima1", "arima2", "Mean from ARIMA 2"),
+       col = c("darkblue", "red", "darkgray", "black"), lwd = 1.5)
+```
+
+It seems that the `arima1` and `arima2` models approximately captures the pattern, although it does not seem to capture downward moves in the CPI that well.. ARIMA models can give us a benchmark to compare other types of time series models, either through in-sample prediction or out-of-sample forecast.
+
+## 9.2 Seasonal Autoregressive (Integrated) Moving Average Model
+
+The Seasonal ARIMA or SARIMA is the similar to an ARIMA model but takes into account the seasonal effects in the series. The notation for such a model has 4 additional components, SARIMA(p, d, q)(P, D, Q)m, where p, q is the lags of the AR and MA terms, and d is the order of integration. P, Q refers to the seasonal lags of the AR and MA terms, D is the seasonal differencing, and m is the season in a year (12 for monthly data, 4 for quarterly, etc.).
+
+m determines the previous period for which we take a value of P, D, and Q. So if m = 4 for quarterly data, P = 1 means we take the y value 4 quarters ago and Q = 1 means we take the MA value 4 quarters ago, while D = 1 means we take a difference on the value of $y$ 4 quarters ago. For example, a SARIMA(1, 0, 0)(1, 1, 1)4 would be written as:
+
+$$
+y_t - y_{t-4} = \alpha + (\alpha_1 y_{t-1} - \alpha_1 y_{t-5}) + (\alpha_2 y_{t-2} - \alpha_2 y_{t-6}) + beta_1 u_{t-4}) + u_t
+$$
+
+If we let $z_t = y_t - y_{t-4}$, we can simplify the model to:
+
+$$
+z_t = \alpha + \alpha_1 z_{t-1} + \alpha_2 z_{t-2} + beta_1 u_{t-4} + u_t
+$$
+
+As mentioned in Section 4.1 when doing the exploratory analysis for CPI, it might be possible that there are seasonal components in the CPI series, hence a SARIMA model would be able to account for these effects. We can use the **`auto.arima`** function to obtain a SARIMA model simply.
+
+```{r sarima}
+sarima <- forecast::auto.arima(train$CPI,
+                               ic = "aic",
+                               stepwise = F,
+                               approximation = F,
+                               trace = F,
+                               method = "ML")
+
+summary(sarima)
+```
+
+The `sarima` model had a lower AIC and slightly higer log-likelihood than the `arima2` model, which typically indicates a better fit. I have plotted the actual CPI and the fitted values from the `sarima` model.
+
+```{r plot sarima}
+plot(as.ts(train$CPI),
+     col = "darkblue", type = "l", lwd = 2,
+     ylab = "CPI Value", main = "Actual vs Fitted CPI Using ARIMA",
+     xlim = c(25, 42), ylim = c(75, 105))
+
+lines(sarima$fitted, col = "red", type = "l", lwd = 2)
+
+lines(arima2$fitted, col = "darkgray", type = "l", lwd = 2)
+
+legend(x = "topleft", legend = c("Actual CPI", "sarima", "arima2"),
+       col = c("darkblue", "red", "darkgray"), lwd = 1.5)
+```
+
+## 9.3 Autoregressive Distributed Lag Models
+
+An ARDL model is similar to an ARMA model, except it used the lags of the dependent variables and lags of explanatory variables to predict $y_t$. ARDL can be used on time series with combinations of I(0) and I(1). 
+
+The simplest ARDL model is one with an explanatory ($x$) and a dependent variable ($y$) and the notation for this is ARDL(p, q). Unlike the ARIMA models, an ARDL model allows us to capture the dynamic effects from $x$ to $y$. We can write the model as such:
+
+$$
+y_t = \alpha + \sum_{i=1}^p \alpha_i y_{t-i} + \sum_{j=0}^q \beta_i x_{t-i} + \epsilon_t
+$$
+
+In our case, we have more than 1 explanatory variables but the same concept applies. We can use the **`auto_ardl`** function in the **`ARDL`** package to automatically select an ARDL model that has the lowest AIC based on a maximumn number of lags for the search.
+
+```{r ardl}
+ardl1 <- ARDL::auto_ardl(formula = d.CPI ~ d.DSPI + d.CLI + d.PCE, 
+                         data = as.zoo(diff.train),
+                         max_order = 4, grid = T,
+                         selection = "AIC")
+
+ardl1$best_model
+```
+
+
+
+
 
 
 
