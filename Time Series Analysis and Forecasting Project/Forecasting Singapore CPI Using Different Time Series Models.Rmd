@@ -3,9 +3,6 @@ title: "Forecasting Singapore's Consumer Price Index Using Different Time Series
 output:
   github_document:
     toc: true
-editor_options: 
-  markdown: 
-    wrap: 72
 ---
 
 # 1 Introduction
@@ -14,9 +11,8 @@ The purpose of this project is to introduce time series modelling and
 forecasting in R using a practical example. It covers the common tests
 that are done in time series analysis, such as unit root tests for
 stationarity, Breusch-Godfrey test for serial correlation, and Granger
-Causality test for determining relationship between variables. The main
-models used in this project are the ARIMA, ARDL and VAR models, which
-will be discussed in detail in the later sections.
+Causality test for determining whether variables are useful in forecasting other variables. The main models used in this project are the ARIMA, ARDL and VAR models, which
+will be discussed in detail in the later sections. However, I would not be tackling the issue of seasonality in this project as it will become a lengthy discussion. Instead, I would do this in a future project as I get familiar with the treatment of seasonal effects on time series and allow for comparison against the results I have documented here.
 
 I attempted to forecast Singapore's Consumer Price Index (CPI) using the
 Producer Price Index (PPI), the Composite Leading Index (CLI) and the
@@ -298,7 +294,7 @@ I have also generated a boxplot of the range of CPI values of all years
 grouped by the quarters. It is hard to say if there are any differences
 between the quarters to indicate an effect of seasonality. However,
 since the data obtained was not seasonally-adjusted, we might want to
-consider adding seasonal dummies to our time series model.
+consider adding seasonal dummies to our time series model. However, since seasonality is not the main purpose of this project, we may treat this as a factor for discussion in future research.
 
 ```{r seasonality in cpi}
 boxplot(cpi_q.xts ~ cycle(cpi_q.xts),
@@ -501,9 +497,8 @@ series and hence it is non-stationary, while the alternative hypothesis
 claims that there is no unit root in the series.
 
 If a series is non-stationary, it is common to take the first difference
-(i.e. $y_t$ - $y_{t-1}$) or the natural log on the series. By taking the
-first difference, we now have an I(1) series or we can say that the
-variable is integrated of order 1. The original series is I(0), or at
+(i.e. $y_t$ - $y_{t-1}$) or to de-trend a trend stationary series. If a series is stationary after taking the first difference, we now have an I(1) series or we can say that the
+variable is integrated of order 1. The original series (if stationary) is I(0), or at
 levels.
 
 I performed the ADF test on the four variables in the `data` object,
@@ -623,76 +618,12 @@ corrplot(correldiff,
          addCoef.col = "black")
 ```
 
-# 7 Johansen Test for Cointegration
-
-When we have I(1) variables, there are a few choices presented for
-modelling. Even though the variables are non-stationary at levels, if
-they have a cointegrating relationship, we can estimate a Vector Error
-Correction Model (VECM). Using VECM allows us to model long-run
-relationships between the variables. However, if they do not have a
-cointegrating relationship, we can only estimate a short-run model using
-the Vector Autoregressive (VAR) or Autoregressive Distributed Lag (ARDL)
-models.
-
-To test for cointegration of multivariate time series, I have used the
-Johansen Test using the **`ca.jo`** function in the **`urca`** package.
-One of the arguments required is to specify the lag order of the level
-series in the VAR model. This can be determined using the
-**`VARselect`** function in the **`vars`** package.
-
-```{r lag for jo test}
-# Use the data at levels, not at first difference
-lagselect <- vars::VARselect(train, lag.max = 4, type = "const", season = 4)
-
-lagselect$selection 
-```
-
-To be constant throughout the project, I would use the AIC to select the
-number of lags. The returned result showed that 5 lags was chosen by the
-AIC model, which will be used in our Johansen Test.
-
-```{r jo test trace}
-jotest <- urca::ca.jo(x = train, type = "trace", ecdet = "const", K = 2, season = 4)
-
-summary(jotest)
-```
-
-The test results are read starting from:
-
-1.  r = 0: value under test column is more than value under 5pct column
-    (statistically significant) and we have at least one cointegrating
-    relationship.
-
-2.  r \<= 1: value under test column is more than value under 5pct
-    column (statistically significant) and we have more than one
-    cointegrating relationship.
-
-3.  r \<= 2: value under test column is more than value under 5pct
-    column (statistically significant) and we have more than two
-    cointegrating relationship.
-
-4.  r \<= 3: value under test column is less than value under 5pct
-    column (statistically insignificant) and we have at most three
-    cointegrating relationship.
-
-Since we have found cointegrating relationships through the Johansen
-Test, we can estimate a VECM model.
-
-# 8 Granger Causality Test
-
-Using the Granger Causality Test, we can statistically determine if a
-series can be used predict values of another series better than solely
-using its past values. Despite the name, it should not be used to
-determine real causal relationships between variables. It can be a
-useful test to determine if variables should be added to a time series
-model to improve forecasting accuracy.
-
-# 9 Model Selection
+# 7 Model Selection
 
 In this section, I discussed the different possible time series models
 that can be created from our data.
 
-## 9.1 Autoregressive (Integrated) Moving Average Model
+## 7.1 Autoregressive (Integrated) Moving Average Model
 
 The AR(I)MA model consists of two parts, an autoregressive (AR) model
 and a moving average (MA) model. Integrated refers to the number of
@@ -746,17 +677,19 @@ to fit a ARIMA(1, 1, 4) model using the **`Arima`** function in **`forecast`** p
 
 ```{r arima114}
 # order refers to the (p,d,q) of the ARIMA model
+# d = 0 as we are using the differenced data
 # method for estimation is to use maximum likelihood
 
-arima1 <- forecast::Arima(train$CPI, 
-                          order = c(1, 1, 4), 
-                          include.constant = T,
+arima1 <- forecast::Arima(diff.train$d.CPI, 
+                          order = c(1, 0, 4),
                           method = "ML")
 
 summary(arima1)
 ```
 
-The output shows the coefficients of the lagged variables in the ARIMA model. It should be noted that the mean value is the mean of the series (not the sample mean, but calculated with the log-likelihood). To convert to the constant value, we multiply the mean by $(1-0.7090)$, basically coefficient of the AR terms.
+Another method that gets us the same results would be to use the data at levels but indicate `c(1, 1, 4)` in the `order` argument. The benefit of using this method is that the fitted values obtained from the model is automatically corrected to values at levels, instead of first difference. However, other functions used in further sections are based on differenced data as input since we cannot specify a differencing argument in the functions. Therefore, for better comparison, I have decided to use the differenced data here as well.
+
+The output shows the coefficients of the lagged variables in the ARIMA model. It should be noted that the mean value is the mean of the series (not the sample mean, but calculated with the log-likelihood). To convert to the constant value, we multiply the mean by $(1-0.7090)$, which is basically coefficient of the AR terms.
 
 We can write our model as:
 
@@ -764,10 +697,10 @@ $$
 y_t = 0.097 + 0.7090y_{t-1} - 0.3086u_{t-1} - 0.0016u_{t-2} - 0.0469u_{t-3} + 0.0463u_{t-4}
 $$
 
-How well does our manually selected model compare against a model selected automatically using the lowest Akaike Information Criterion? We can estimate such a model using the **`auto.arima`** function. We have many arguments that we should include: `seasonal` should be set to False since I am not estimating a seasonal ARIMA (more on this later), `stepwise` and `approximation` should be set to False to obtain a more accurate model selection, `ic` set to AIC, and `trace` set to False to suppress the running of the models by the automatic selection.
+How well does our manually selected model compare against a model selected automatically using the lowest Akaike Information Criterion? We can estimate such a model using the **`auto.arima`** function. We have many arguments that we should include: `seasonal` should be set to False since I am not estimating a seasonal ARIMA, `stepwise` and `approximation` should be set to False to obtain a more accurate model selection, `ic` set to AIC, and `trace` set to False to suppress the running of the models by the automatic selection.
 
 ```{r auto arima}
-arima2 <- forecast::auto.arima(train$CPI, 
+arima2 <- forecast::auto.arima(diff.train$d.CPI, 
                                seasonal = F, 
                                ic = "aic", 
                                stepwise = F, 
@@ -781,72 +714,27 @@ summary(arima2)
 We can see that the model automatically selected using the lowest AIC is the different from the one I had manually coded into the **`Arima`** function. The `arima2` model had a lower AIC and had a slightly higher log-likelihood than the `arima1` model. I plotted the actual CPI values and the fitted values based on the two ARIMA models to visualize how well the model fits.
 
 ```{r plot arima}
-# indicated xlim and ylim to zoom into the chart to have a better view of the patterns
-plot(as.ts(train$CPI),
-     col = "darkblue", type = "l", lwd = 2,
-     ylab = "CPI Value", main = "Actual vs Fitted CPI Using ARIMA",
-     xlim = c(25, 42), ylim = c(75, 105))
+# indicated xlim to zoom into the chart to have a better view of the patterns
+plot(as.ts(diff.train$d.CPI),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.CPI", main = "Actual vs Fitted CPI at First Difference Using ARIMA",
+     xlim = c(25, 42))
 
-lines(arima1$fitted, col = "red", type = "l", lwd = 2)
+lines(fitted(arima1), col = "red", type = "l", lwd = 3)
 
-lines(arima2$fitted, col = "darkgray", type = "l", lwd = 2)
+lines(fitted(arima2), col = "gray", type = "l", lwd = 3)
 
 abline(h = arima2$coef[4], col = "black", lwd = 2)
 
-legend(x = "topleft", legend = c("Actual CPI", "arima1", "arima2", "Mean from ARIMA 2"),
-       col = c("darkblue", "red", "darkgray", "black"), lwd = 1.5)
+legend(x = "topright", legend = c("Actual CPI", "arima1", "arima2", "Mean from arima2"),
+       col = c("darkblue", "red", "gray", "black"), lwd = 1.5)
 ```
 
 It seems that the `arima1` and `arima2` models approximately captures the pattern, although it does not seem to capture downward moves in the CPI that well.. ARIMA models can give us a benchmark to compare other types of time series models, either through in-sample prediction or out-of-sample forecast.
 
-## 9.2 Seasonal Autoregressive (Integrated) Moving Average Model
+## 7.2 Autoregressive Distributed Lag Models
 
-The Seasonal ARIMA or SARIMA is the similar to an ARIMA model but takes into account the seasonal effects in the series. The notation for such a model has 4 additional components, SARIMA(p, d, q)(P, D, Q)m, where p, q is the lags of the AR and MA terms, and d is the order of integration. P, Q refers to the seasonal lags of the AR and MA terms, D is the seasonal differencing, and m is the season in a year (12 for monthly data, 4 for quarterly, etc.).
-
-m determines the previous period for which we take a value of P, D, and Q. So if m = 4 for quarterly data, P = 1 means we take the y value 4 quarters ago and Q = 1 means we take the MA value 4 quarters ago, while D = 1 means we take a difference on the value of $y$ 4 quarters ago. For example, a SARIMA(1, 0, 0)(1, 1, 1)4 would be written as:
-
-$$
-y_t - y_{t-4} = \alpha + (\alpha_1 y_{t-1} - \alpha_1 y_{t-5}) + (\alpha_2 y_{t-2} - \alpha_2 y_{t-6}) + beta_1 u_{t-4}) + u_t
-$$
-
-If we let $z_t = y_t - y_{t-4}$, we can simplify the model to:
-
-$$
-z_t = \alpha + \alpha_1 z_{t-1} + \alpha_2 z_{t-2} + beta_1 u_{t-4} + u_t
-$$
-
-As mentioned in Section 4.1 when doing the exploratory analysis for CPI, it might be possible that there are seasonal components in the CPI series, hence a SARIMA model would be able to account for these effects. We can use the **`auto.arima`** function to obtain a SARIMA model simply.
-
-```{r sarima}
-sarima <- forecast::auto.arima(train$CPI,
-                               ic = "aic",
-                               stepwise = F,
-                               approximation = F,
-                               trace = F,
-                               method = "ML")
-
-summary(sarima)
-```
-
-The `sarima` model had a lower AIC and slightly higer log-likelihood than the `arima2` model, which typically indicates a better fit. I have plotted the actual CPI and the fitted values from the `sarima` model.
-
-```{r plot sarima}
-plot(as.ts(train$CPI),
-     col = "darkblue", type = "l", lwd = 2,
-     ylab = "CPI Value", main = "Actual vs Fitted CPI Using ARIMA",
-     xlim = c(25, 42), ylim = c(75, 105))
-
-lines(sarima$fitted, col = "red", type = "l", lwd = 2)
-
-lines(arima2$fitted, col = "darkgray", type = "l", lwd = 2)
-
-legend(x = "topleft", legend = c("Actual CPI", "sarima", "arima2"),
-       col = c("darkblue", "red", "darkgray"), lwd = 1.5)
-```
-
-## 9.3 Autoregressive Distributed Lag Models
-
-An ARDL model is similar to an ARMA model, except it used the lags of the dependent variables and lags of explanatory variables to predict $y_t$. ARDL can be used on time series with combinations of I(0) and I(1). 
+An ARDL model is similar to an ARMA model, except it used the lags of the dependent variables and lags of other explanatory variables to predict $y_t$. ARDL can be used on time series with combinations of I(0) and I(1). 
 
 The simplest ARDL model is one with an explanatory ($x$) and a dependent variable ($y$) and the notation for this is ARDL(p, q). Unlike the ARIMA models, an ARDL model allows us to capture the dynamic effects from $x$ to $y$. We can write the model as such:
 
@@ -854,20 +742,169 @@ $$
 y_t = \alpha + \sum_{i=1}^p \alpha_i y_{t-i} + \sum_{j=0}^q \beta_i x_{t-i} + \epsilon_t
 $$
 
-In our case, we have more than 1 explanatory variables but the same concept applies. We can use the **`auto_ardl`** function in the **`ARDL`** package to automatically select an ARDL model that has the lowest AIC based on a maximumn number of lags for the search.
+In our case, we have more than 1 explanatory variables but the same concept applies. We can use the **`auto_ardl`** function in the **`ARDL`** package to automatically select an ARDL model that has the lowest AIC based on a maximum number of lags for the search.
 
-```{r ardl}
-ardl1 <- ARDL::auto_ardl(formula = d.CPI ~ d.DSPI + d.CLI + d.PCE, 
-                         data = as.zoo(diff.train),
-                         max_order = 4, grid = T,
-                         selection = "AIC")
+```{r ardl1}
+# max_order = 4 to indicate maximum lag in the search for all variables is 4
+# possible to state a vector of length equal to no. of variables in max_order
+# grid = T to to prevent stepwise search of models
 
-ardl1$best_model
+ardl1_lag <- ARDL::auto_ardl(formula = d.CPI ~ d.DSPI + d.CLI + d.PCE,
+                             data = as.zoo(diff.train),
+                             max_order = 4, grid = T,
+                             selection = "AIC")
+
+# Obtain the best lag order, arranged by how variables were entered in the formula argument
+ardl1_lag$best_order
+
+# Save the best model selected by the auto ardl function
+ardl1 <- ardl1_lag$best_model
+
+summary(ardl1)
 ```
 
+Unlike the ARIMA output earlier, the ARDL output does not state the log-likelihood or the AIC values. This can be found using the **`logLik`** and **`AIC`** functions in base R.
+
+```{r loglik and aic}
+logLik(ardl1)
+
+AIC(ardl1)
+```
+
+The log-likelihood is much higher and AIC much lower than the `arima2` model estimated in Section 9.1, which should indicate a better fit. However, `d.PCE` seems to be statistically insignificant and there are no lags for this variable. Let's estimate another ARDL model with `d.PCE` and see the results.
+
+```{r ardl2}
+ardl2_lag <- ARDL::auto_ardl(formula = d.CPI ~ d.DSPI + d.CLI,
+                             data = as.zoo(diff.train),
+                             max_order = 4, grid = T,
+                             selection = "AIC")
+
+ardl2 <- ardl2_lag$best_model
+
+summary(ardl2)
+
+logLik(ardl2)
+
+AIC(ardl2)
+```
+
+There seems to be negligible difference to the log-likelihood, but AIC value has decreased. As such, I might choose the more parsimonious `ardl2` model but I would still analyze them both on out-of-sample forecasts in the later section.
+
+```{r plot ardl}
+plot.zoo(diff.train$d.CPI,
+         col = "darkblue", type = "l", lwd = 3,
+         ylab = "d.CPI", xlab = "Time",
+         main = "Actual vs Fitted CPI at First Difference Using ARDL",
+         xlim = c(1990, 2019))
+
+lines(fitted(ardl1), col = "red", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual CPI", "ardl1"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
+
+Notice that the x-axis has changed. This is because I used the **`plot.zoo`** function instead of **`plot`** since both `diff.train` and `fitted(ardl)` are technically `zoo` objects. The fitted values of `arima1` and `arima2` are `ts` objects and coercing them to `zoo` objects require more steps, which is not the purpose of this project.
+
+We can see a significant improvement in the fit of the `ardl1` model as compared to the `arima2` model in Section 9.1.
+
+## 7.3 Vector Autoregression Model
+
+A VAR model allows us to model the influence of two or more time series on one another. This means that the variables (e.g. $x$ and $y$) are simultaneously determined by the lags of these variables. A VAR(p) model of two variables can be written as:
+
+$$
+y_t = \beta_{10} + \beta_{11} y_{t-1} + \dotsc + \beta_{1p} y_{t-p} + \gamma_{11} x_{t-1} + \dotsc + \gamma_{1p} x_{t-p} + u_{1t} \\
+
+x_t = \beta_{20} + \beta_{21} y_{t-1} + \dotsc + \beta_{2p} y_{t-p} + \gamma_{21} x_{t-1} + \dotsc + \gamma_{2p} x_{t-p} + u_{2t}
+$$
+
+We can see that with more lags and more variables included into the VAR system, there would be more unknown parameters and lesser degrees of freedom, which can affect estimation and statistical tests. However, if too few lags were included, we may encounter the problem of autocorrelated errors.
+
+To build a VAR model, we first need to determine the optimal number of lags which can be done by using the **`VARselect`** function in the **`vars`** package.
+
+```{r var lag}
+var_lag <- vars::VARselect(y = diff.train,
+                           lag.max = 4,
+                           type = "none")
+
+var_lag
+```
+
+Based on AIC, I would choose to use 4 lag for the VAR model, i.e. VAR(4) model. We could use the SC (or BIC) selected lags for a parsimonious model. The function **`VAR`** in **`vars`** package allows us to estimate this model.
+
+```{r var}
+var <- vars::VAR(y = diff.train,
+                 p = 4,
+                 type = "none")
+
+summary(var)
+```
+
+The output shows the four equations, one for each variable, with 4 lags of each variable. Therefore, the model gets really big as more variables and lags are added, which can become a problem.
+
+# 8 Granger Causality Test
+
+Using the Granger Causality Test, we can statistically determine if a
+series can be used predict values of another series better than solely
+using its past values. Despite the name, it should not be used to
+determine true cause-and-effect relationships between variables. It can be a
+useful test to determine if variables should be added to a time series
+model to improve forecasting accuracy.
 
 
+# 9 Johansen Test for Cointegration
 
+Since we have I(1) variables, there are a few choices presented for
+modelling. Even though the variables are non-stationary at levels, if
+they have a cointegrating relationship, we can estimate a Vector Error
+Correction Model (VECM). Using VECM allows us to model long-run
+relationships between the variables. However, if they do not have a
+cointegrating relationship, we can only estimate a short-run model using
+the Vector Autoregressive (VAR) or Autoregressive Distributed Lag (ARDL)
+models.
+
+To test for cointegration of multivariate time series, I have used the
+Johansen Test using the **`ca.jo`** function in the **`urca`** package.
+One of the arguments required is to specify the lag order of the level
+series in the VAR model. This can be determined using the
+**`VARselect`** function in the **`vars`** package.
+
+```{r lag for jo test}
+# Use the data at levels, not at first difference
+lagselect <- vars::VARselect(train, lag.max = 4, type = "const", season = 4)
+
+lagselect$selection 
+```
+
+To be constant throughout the project, I would use the AIC to select the
+number of lags. The returned result showed that 5 lags was chosen by the
+AIC model, which will be used in our Johansen Test.
+
+```{r jo test trace}
+jotest <- urca::ca.jo(x = train, type = "trace", ecdet = "const", K = 2, season = 4)
+
+summary(jotest)
+```
+
+The test results are read starting from:
+
+1.  r = 0: value under test column is more than value under 5pct column
+    (statistically significant) and we have at least one cointegrating
+    relationship.
+
+2.  r \<= 1: value under test column is more than value under 5pct
+    column (statistically significant) and we have more than one
+    cointegrating relationship.
+
+3.  r \<= 2: value under test column is more than value under 5pct
+    column (statistically significant) and we have more than two
+    cointegrating relationship.
+
+4.  r \<= 3: value under test column is less than value under 5pct
+    column (statistically insignificant) and we have at most three
+    cointegrating relationship.
+
+Since we have found cointegrating relationships through the Johansen
+Test, we can estimate a VECM model.
 
 
 
