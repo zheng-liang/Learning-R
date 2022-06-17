@@ -513,18 +513,18 @@ We can see that the model automatically selected using the lowest AIC is the dif
 
 ```{r plot arima}
 # indicated xlim to zoom into the chart to have a better view of the patterns
-plot(as.ts(diff.train$d.CPI),
+plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "d.CPI", main = "Actual vs Fitted CPI at First Difference Using ARIMA",
-     xlim = c(25, 42))
+     xlim = c(1990, 2019))
 
-lines(fitted(arima1), col = "red", type = "l", lwd = 3)
+lines(ts(fitted(arima1), start = c(1978, 2), frequency = 4), col = "red", type = "l", lwd = 3)
 
-lines(fitted(arima2), col = "gray", type = "l", lwd = 3)
+lines(ts(fitted(arima2), start = c(1978, 2), frequency = 4), col = "gray", type = "l", lwd = 3)
 
 abline(h = arima2$coef[4], col = "black", lwd = 2)
 
-legend(x = "topright", legend = c("Actual CPI", "arima1", "arima2", "Mean from arima2"),
+legend(x = "topright", legend = c("Actual d.CPI", "arima1", "arima2", "Mean from arima2"),
        col = c("darkblue", "red", "gray", "black"), lwd = 1.5)
 ```
 
@@ -580,7 +580,7 @@ plot.zoo(diff.train$d.CPI,
 
 lines(fitted(ardl), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual CPI", "ardl"),
+legend(x = "bottomleft", legend = c("Actual d.CPI", "ardl"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
@@ -588,14 +588,14 @@ Notice that the x-axis has changed. This is because I used the **`plot.zoo`** fu
 
 We can see a significant improvement in the fit of the `ardl1` model as compared to the `arima2` model in Section 9.1.
 
-## 7.3 Vector Autoregression Model
+## 7.3 Vector Autoregressive Model
 
-A VAR model allows us to model the influence of two or more time series on one another. This means that the variables (e.g. $x$ and $y$) are simultaneously determined by the lags of these variables. A VAR(p) model of two variables can be written as:
+A VAR model allows us to model the influence of two or more time series on one another, meaning that these variables are endogenous. In VAR models, the variables (e.g. $x$ and $y$) are simultaneously determined by the lags of these variables. A VAR(p) model of two variables can be written as:
 
 $$ 
-y_t = beta_{10} + beta_{11} y_{t-1} + dotsc + beta_{1p} y_{t-p} + gamma_{11} x_{t-1} + dotsc + gamma_{1p} x_{t-p} + u_{1t} \\
+y_t = beta_{10} + beta_{11} y_{t-1} + dotsc + beta_{1p} y_{t-p} + gamma_{11} x_{t-1} + \dotsc + gamma_{1p} x_{t-p} + u_{1t} \\
 
-x_t = beta_{20} + beta_{21} y_{t-1} + dotsc + beta_{2p} y_{t-p} + gamma_{21} x_{t-1} + dotsc + gamma_{2p} x_{t-p} + u_{2t} 
+x_t = beta_{20} + beta_{21} y_{t-1} + dotsc + beta_{2p} y_{t-p} + gamma_{21} x_{t-1} + \dotsc + gamma_{2p} x_{t-p} + u_{2t} 
 $$
 
 We can see that with more lags and more variables included into the VAR system, there would be more unknown parameters and lesser degrees of freedom, which can affect estimation and statistical tests. However, if too few lags were included, we may encounter the problem of autocorrelated errors.
@@ -605,22 +605,66 @@ To build a VAR model, we first need to determine the optimal number of lags whic
 ```{r var lag}
 var_lag <- vars::VARselect(y = diff.train,
                            lag.max = 4,
-                           type = "none")
+                           type = "const")
 
 var_lag
 ```
 
-Based on AIC, I would choose to use 2 lag for the VAR model, i.e. VAR(2) model. We could use the SC (or BIC) selected lags for a parsimonious model. The function **`VAR`** in **`vars`** package allows us to estimate this model.
+Based on AIC, I would choose to use 2 lag for the VAR model, i.e. VAR(2) model. We could use the SC (or BIC) selected lags for a parsimonious model. The function **`VAR`** in the **`vars`** package allows us to estimate this model.
 
 ```{r var}
 var <- vars::VAR(y = diff.train,
                  p = 2,
-                 type = "none")
+                 type = "const")
 
-summary(var)
+stargazer(var$varresult, 
+          type = "text", 
+          title = "VAR Estimation Result for d.CPI, d.DSPI, d.CLI", 
+          digits = 3, 
+          column.labels = c("d.CPI", "d.DSPI", "d.CLI"),
+          dep.var.labels.include = F)
 ```
 
-The output shows the four equations, one for each variable, with 4 lags of each variable. Therefore, the model gets really big as more variables and lags are added, which can become a problem.
+The output shows the three equations, one for each variable, with 2 lags of each variable. Therefore, the model gets really big as more variables and lags are added, which can become a problem.
+
+```{r plot var dcpi}
+plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.CPI", xlab = "Time",
+     main = "Actual vs Fitted CPI at First Difference Using VAR")
+
+# Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
+lines(ts(fitted(var$varresult$d.CPI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual d.CPI", "var"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
+
+An advantage of models like VAR is that we can also plot the predicted values of other variables that are in the model.
+
+```{r plot var ddspi}
+plot(ts(diff.train$d.DSPI, start = c(1978, 2), frequency = 4),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.DSPI", xlab = "Time",
+     main = "Actual vs Fitted DSPI at First Difference Using VAR")
+
+lines(ts(fitted(var$varresult$d.DSPI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual d.DSPI", "var"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
+
+```{r plot var dcli}
+plot(ts(diff.train$d.CLI, start = c(1978, 2), frequency = 4),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.CLI", xlab = "Time",
+     main = "Actual vs Fitted CLI at First Difference Using VAR")
+
+lines(ts(fitted(var$varresult$d.CLI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual d.CLI", "var"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
 
 # 8 Granger Causality Test
 
@@ -653,17 +697,22 @@ To test for cointegration of multivariate time series, I have used the Johansen 
 # Use the data at levels, not at first difference
 lagselect <- vars::VARselect(train, lag.max = 4, type = "const")
 
-lagselect$selection 
+lagselect$selection
 ```
 
 To be constant throughout the project, I would use the AIC to select the number of lags. The `lagselect` output indicated we should use 3 lags for the Johansen Test.
 
 ```{r jo test trace}
+# Indicate type = "trace" for trace test, "eigne" for eigenvalue test
+
+# Indicate ecdet = "const" to add constant to cointegration, "none" or "trend" for no intercept or to add trend to cointegration
+
+# K is the number of lags from the lag selection using VARselect
+
 jotest <- urca::ca.jo(x = train, 
                       type = "trace", 
-                      ecdet = "const", 
-                      K = 3,
-                      spec = "transitory")
+                      ecdet = "none", 
+                      K = 3)
 
 summary(jotest)
 ```
@@ -672,7 +721,7 @@ The test results are read starting from:
 
 1.  r = 0: value under test column is more than value under 5pct column (statistically significant) and we have at least one cointegrating relationship.
 
-2.  r \<= 1: value under test column is more than value under 5pct column (statistically significant) and we have more than one cointegrating relationship.
+2.  r \<= 1: value under test column is more than value under 5pct column (statistically insignificant) and we have more than one cointegrating relationship.
 
 3.  r \<= 2: value under test column is less than value under 5pct column (statistically insignificant) and we have at most two cointegrating relationship.
 
@@ -680,12 +729,12 @@ Since we have found cointegrating relationships through the Johansen Test, we ca
 
 ## 9.1 Error Correction Model
 
-Given the cointegration between variables, we can model the long-run equilibrium variable $y^*$ using the equilibrium of $x^*$ at levels. To model the short-run model, we need to remember that the variables are I(1), so we need to use a first-differenced equation in the form $\Delta y_t = \gamma_0 + \gamma_1 \Delta x_t + \epsilon_t$. But since there is a long-run association between $y$ and $x$, we could include some components into the short-run model so that it takes into account this long-run association. What we can add into the short-run model is the error correction term (ECT), which is the one-period ago residual from the long-run model. The following are the steps to modelling an ECM:
+Given the cointegration between variables, we can model the long-run equilibrium variable $y^*$ using the equilibrium of $x^*$ at levels. To model the short-run model, we need to remember that the variables are I(1), so we need to use a first-differenced equation, for example $\Delta y_t = \gamma_0 + \gamma_1 \Delta x_t + \epsilon_t$. But since there is a long-run association between $y$ and $x$, we could include some components into the short-run model so that it takes into account this long-run association. What we can add into the short-run model is the error correction term (ECT), which is the one-period ago residual from the long-run model. The following are the steps to modelling an ECM:
 
 1. Regress $y^*$ on $x^*$ (and their lags) and obtain the residuals $v_t$
-2. Regress $\Delta y_t$ on $\Delta x_t$ and the lag of the residual in Step 1 $v_{t-1}$
+2. Regress $\Delta y_t$ on $\Delta x_t$ and the lag of the residual in Step 1, $v_{t-1}$
 
-If there is indeed cointegration, the coefficient of $v_{t-1}$ should be negative. This is because, taking the long-run pattern into account, if $y_{t-1}$ was above/below $y^*$, then we should expect $y_t$ to decrease/increase. 
+If there is indeed cointegration, the coefficient of $v_{t-1}$ should be between -1 and 0. This is because, taking the long-run pattern into account, if $y_{t-1}$ was above/below $y^*$, then we should expect $y_t$ to decrease/increase, showing an adjustment to the equilibrium. 
 
 Let us first estimate a model in levels as per step one using **`auto_ardl`**
 
@@ -712,26 +761,135 @@ summary(un_ecm)
 `L(CPI, 1)` is the lag of our dependent variable and its coefficient is actually the ECT, which tells us how `CPI` would react given a shock to `L(CPI, 1)`. `L(DSPI, 1)` and `L(CLI, 1)` is the long-run coefficient (after some conversion) and the differenced variables (those starting with `d...`) are the short-run coefficients.
 
 ```{r recm}
+# Indicated case = 3 to include constant in the model
 r_ecm <- ARDL::recm(un_ecm, case = 3)
 
 summary(r_ecm)
 ```
 
-We can see that the `r_ecm` output is the same as the `un_ecm` output, less the long-run variables. And as expected, the ECT is negative (and statistically significant).
+We can see that the `r_ecm` output is the same as the `un_ecm` output, less the long-run variables. And as expected, the ECT is negative and is between -1 and 0 (and statistically significant).
 
 To obtain the long-run multiplier, we can use the **`multiplier`** function.
 
-```{r lr coef}
+```{r lr multiplier}
 multipliers(un_ecm) # Can also be used on ardl_lr
 ```
 
+The equation of the error correction model is:
+
+$$
+\begin{aligned}
+
+\Delta CPI_t = &-0.119 + 0.196\Delta CPI_{t-1} + 0.126\Delta CPI_{t-2} + 0.036\Delta DSPI_t \\
+& + 0.018\Delta DSPI_{t-1} - 0.031\Delta CLI_{t} + 0.039\Delta CLI_{t-1} - 0.030ECT_{t-1}
+
+
+\end{aligned}
+$$
+
+```{r plot ardl ecm}
+plot.zoo(diff.train$d.CPI, col = "darkblue", type = "l", lwd = 3,
+         ylab = "d.CPI", xlab = "Time",
+         main = "Actual vs Fitted CPI at First Difference Using ARDL-ECM")
+
+lines(fitted(r_ecm), col = "red", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual d.CPI", "ardl-ecm"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
 
 ## 9.2 Vector Error Correction Model
+
+The VECM is simply a VAR model with error correction terms. What has been explained in Section 7.3 Vector Autoregressive Models and Section 9.1 Error Correction Model should be sufficient to give a glimpse of what a VECM is about. 
+
+We can build a VECM using the **`urca`** package, using the functions **`ca.jo`**, **`cajools`** and **`cajorls`**. Although we had seen earlier in the Johansen Test that we used **`ca.jo`** to test the number of cointegrating relationships, it can also provide the VECM using the other functions mentioned.
+
+```{r}
+# K = 3 was determined in Section 9 in the Johansen Test
+# Add in spec = "transitory" to obtain the VECM formula
+
+get_vecm <- ca.jo(x = train, 
+                  type = "trace", 
+                  ecdet = "const", 
+                  K = 3,
+                  spec = "transitory")
+
+
+# Get estimated VAR parameters
+# r represents number of cointegrations
+
+vec_ecm <- cajorls(get_vecm, r = 2)
+
+kable(tidy(vec_ecm$rlm), format = "pipe",
+      caption = "Estimates of 3-Equation Vector Error Correction Model",
+      digits = 3)
+```
+
+The output shows the coefficients under the `estimate` column of each variable under the `term` column. The 3 equations in the VECM are:
+
+$$
+\begin{aligned}
+\Delta CPI_t &= 0.189\Delta CPI_{t-1} + 0.165\Delta CPI_{t-2} + 0.032 \Delta DSPI_{t-1} -0.007\Delta DSPI_{t-2} \\
+&~~~~
++0.021\Delta CLI_{t-1} + 0.015\Delta CLI_{t-2} -0.038ECT_{1, t-1} + 0.009ECT_{2,t-1} \\
+
+\Delta DSPI_t &= -0.050\Delta CPI_{t-1} + 0.611\Delta CPI_{t-2} + 0.267\Delta DSPI_{t-1} -0.325\Delta DSPI_{t-2} \\
+&~~~~
+-0.125\Delta CLI_{t-1} + 0.208\Delta CLI_{t-2} -0.329ECT_{1, t-1} -0.032ECT_{2,t-1} \\
+
+\Delta CLI_t &= -0.018\Delta CPI_{t-1} -0.358\Delta CPI_{t-2} -0.053\Delta DSPI_{t-1} -0.103\Delta DSPI_{t-2} \\
+&~~~~
++0.366\Delta CLI_{t-1} -0.047\Delta CLI_{t-2} -0.021ECT_{1, t-1} + 0.016ECT_{2,t-1}
+
+\end{aligned}
+$$
+
+```{r plot vecm cpi}
+plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.CPI", xlab = "Time",
+     main = "Actual vs Fitted CPI at First Difference Using VAR")
+
+# Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
+lines(ts(fitted(vec_ecm$rlm)[,"CPI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+
+lines(ts(fitted(var$varresult$d.CPI), start = c(1978, 4), frequency = 4), col = "green", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual d.CPI", "vecm"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
+
+
 
 
 
 # 10 Post-Estimation Tests
 
+Two common problems encountered in time series analysis are serial correlation of errors and heteroskedastic errors. These can affect our analysis as estimators are no longer efficient and the usual test statistics become unreliable, which can be important if inference is the main purpose. The Breusch-Godfrey Test using the function **`bgtest`** can be used to test for serial correlation, while the Breusch-Pagan Test using **`bptest`** can be used to test for heteroskedasticity. Both functions can be found in the **`lmtest`** package.
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
 # 11 Forecasting and Evaluation
 
+
+
+
+
+
+
 # References
+
+
+
+
+
+
