@@ -20,6 +20,11 @@ I attempted to forecast Singapore's Consumer Price Index (CPI) using the Produce
 library(httr)
 library(jsonlite)
 
+# Packages that produces neat regression tables (only when possible)
+library(broom)
+library(knitr)
+library(stargazer)
+
 # Packages that will be needed for the main parts of the project
 library(ARDL) # For ARDL models
 library(bruceR) # For multivariate granger causality test
@@ -300,7 +305,7 @@ Before we continue with any serious analysis, it would be better to split our da
 ```{r split data}
 train <- data["/2019"]
 
-test <- data["2020/"]
+test <- data["2019-12/"] # Need the last observation in 2019 so that when we difference the data, we can avoid the NAs
 ```
 
 # 6 Unit Root Test for Stationarity
@@ -316,55 +321,59 @@ If a series is non-stationary, it is common to take the first difference (i.e. $
 I performed the ADF and KPSS test on the four variables in the `data` object, firstly on the variables at levels then at first differences, using the **`ur.df`** and **`ur.kpss`** function in the **`urca`** package.
 
 ```{r adf cpi level}
-# Indicate type = "drift" as there was a linear trend in the series based on plot
+# Indicate type = "trend" as there was trend in the series based on plot
 # Indicate selectlags = "AIC" to select lags based on Akaike IC
 
 train$CPI %>%
-  ur.df(type = "drift", selectlags = "AIC") %>%
+  ur.df(type = "trend", selectlags = "AIC") %>%
   summary()
 ```
 
-The **`summary`** function returns the full output of the ADF test, but we only need the bottom section where the test statistics and the critical values are. The first test statistic, for `tau2`, is higher than the 5% critical value (-1.0508 > -2.88) but we need it to be lower than the critical value to reject the null. Therefore, the CPI series contains unit root. The other value, for `phi1`, in the test statistic tells us that there is a drift in the time series since it is more than the 5% critical value.
+The **`summary`** function returns the full output of the ADF test, but we only need the bottom section where the test statistics and the critical values are. The first test statistic, for `tau2`, is higher than the 5% critical value (-2.042 > -3.43) but we need it to be lower than the critical value to reject the null (ADF is a one-sided test, where the alternative is < 0). Therefore, the CPI series contains unit root. The `phi3` value (third value in the test statistic) has the null hypothesis that there is unit root and no time trend (joint test). The `phi2` value (second value in the test statistic) has the null hypothesis that there is unit root, no drift and no time trend (joint test). We rejected `phi2` based on the 5% critical value, which means that either one, two or all three coefficients are not 0.
 
 ```{r kpss cpi level}
-# Indicate type = "mu" for drift
+# Indicate type = "tau" for trend
 
 train$CPI %>%
-  ur.kpss(type = "mu", lags = "long") %>%
+  ur.kpss(type = "tau" , lags = "short") %>%
   summary()
 ```
 
-The KPSS test rejected the null hypothesis (test statistic 1.26 > 5% critical value 0.463), which means there is unit root in the CPI series.
+The KPSS test rejected the null hypothesis (test statistic 0.2947 > 5% critical value 0.146), which means there is unit root in the CPI series.
 
 ```{r adf dspi level}
-# Indicate type = "none" as DSPI looked like a random walk in the plot
+# Indicate type = "drift" as DSPI as there is no particular long term trend
 
 train$DSPI %>%
-  ur.df(type = "none", selectlags = "AIC") %>%
+  ur.df(type = "drift", selectlags = "AIC") %>%
   summary()
 
+# Indicate type = "mu" for drift
+
 train$DSPI %>%
-  ur.kpss(type = "mu", lags = "long") %>%
+  ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
 
 For the DSPI series, we can see contradicting results where the ADF test does not reject the null of unit root, but the KPSS test does not reject the null of stationarity. This may happen due to insufficient observations, but let us assume that there is unit root in this series.
 
 ```{r adf cli level}
-# Indicate type = "trend" 
+# Indicate type = "trend"  since there was a clear trend in CLI plot
 
 train$CLI %>%
   ur.df(type = "trend", selectlags = "AIC") %>%
   summary()
 
 train$CLI %>%
-  ur.kpss(type = "tau", lags = "long") %>%
+  ur.kpss(type = "tau", lags = "short") %>%
   summary()
 ```
 
-We rejected the null in the ADF test, and do not reject the null in the KPSS test. This indicated that CLI is trend stationary, which means it can become stationary after removing the trend from the series (aka de-trending). However, I simply took the first difference to make it stationary.
+We rejected the null in the ADF test, and do not reject the null in the KPSS test. This indicated that CLI has a deterministic trend, which can be removed to make the series stationary. However, for simplicity sake, I would use the first difference (although there are arguments that this is incorrect and leads to spurious analysis).
 
 ```{r diff data}
+# By default, the diff function uses lag = 1 and differences = 1
+
 diff.train <- diff(train) %>%
   `colnames<-`(c("d.CPI", "d.DSPI", "d.CLI"))
 
@@ -383,15 +392,15 @@ for (i in 1:3) {
 The following R chunks performs the ADF test on the first-differenced variables. Because we have taken the first difference, there is no need to include trend option in ADF test.
 
 ```{r adf dcpi}
-# After differencing, there should be no deterministic trend in the plots
+# After differencing, there should be no deterministic trend in the plots, but it may contain drift terms (especially dealing with non-zero means)
 # KPSS test null hypothesis is that variables are stationary with deterministic parts, so just indicate type = "mu"
 
 diff.train$d.CPI %>%
-  ur.df(type = "none", selectlags = "AIC") %>%
+  ur.df(type = "drift", selectlags = "AIC") %>%
   summary()
 
 diff.train$d.CPI %>%
-  ur.kpss(type = "mu", lags = "long") %>%
+  ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
 
@@ -401,17 +410,17 @@ diff.train$d.DSPI %>%
   summary()
 
 diff.train$d.DSPI %>%
-  ur.kpss(type = "mu", lags = "long") %>%
+  ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
 
 ```{r adf dcli}
 diff.train$d.CLI %>%
-  ur.df(type = "none", selectlags = "AIC") %>%
+  ur.df(type = "drift", selectlags = "AIC") %>%
   summary()
 
 diff.train$d.CLI %>%
-  ur.kpss(type = "mu", lags = "long") %>%
+  ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
 
@@ -528,7 +537,7 @@ legend(x = "topright", legend = c("Actual d.CPI", "arima1", "arima2", "Mean from
        col = c("darkblue", "red", "gray", "black"), lwd = 1.5)
 ```
 
-It seems that the `arima1` and `arima2` models approximately captures the pattern, although it does not seem to capture downward moves in the CPI that well.. ARIMA models can give us a benchmark to compare other types of time series models, either through in-sample prediction or out-of-sample forecast.
+It seems that the `arima1` and `arima2` models approximately captures the pattern (with slight differences), although it does not seem to capture the magnitude of the movements in the CPI that well. ARIMA models can give us a benchmark to compare other types of time series models, either through in-sample prediction or out-of-sample forecast.
 
 ## 7.2 Autoregressive Distributed Lag Models
 
@@ -685,7 +694,7 @@ With two variables, we can test if $x$ granger-causes $y$, $y$ granger-causes $x
 granger_causality(varmodel = var)
 ```
 
-The output provides both F-test and Likelihood Ratio Test values. Given the significance level of 5%, `d.DSPI` and `d.CLI` granger-cause `d.CPI` and `d.DSPI` granger-causes `d.CLI`. None of the variables granger-cause `d.DSPI` and we did not find any bi-directional causality. It may be that the wrong number of lags was chosen or simply that lags of other variables does not help in predicting other variables. In such cases, the forecasting power of this model may be affected since these variables are inter-dependent on one another. 
+The output provides both F-test and Likelihood Ratio Test values. Given the significance level of 5%, `d.DSPI` and `d.CLI` granger-cause `d.CPI` and `d.DSPI` granger-causes `d.CLI`. None of the variables granger-cause `d.DSPI` and we did not find any bi-directional causality. It may be that the wrong number of lags was chosen or simply that lags of other variables does not help in predicting other variables. In such cases, the forecasting power of this model may be affected since these variables are inter-dependent on one another.
 
 # 9 Johansen Test for Cointegration
 
@@ -703,15 +712,15 @@ lagselect$selection
 To be constant throughout the project, I would use the AIC to select the number of lags. The `lagselect` output indicated we should use 3 lags for the Johansen Test.
 
 ```{r jo test trace}
-# Indicate type = "trace" for trace test, "eigne" for eigenvalue test
+# Indicate type = "trace" for trace test, "eigen" for eigenvalue test
 
-# Indicate ecdet = "const" to add constant to cointegration, "none" or "trend" for no intercept or to add trend to cointegration
+# Indicate ecdet = "none" assuming no intercept in the cointegration process, indicate "const" or "trend" to add constant or trend into the equation
 
 # K is the number of lags from the lag selection using VARselect
 
 jotest <- urca::ca.jo(x = train, 
                       type = "trace", 
-                      ecdet = "none", 
+                      ecdet = "const", 
                       K = 3)
 
 summary(jotest)
@@ -721,11 +730,11 @@ The test results are read starting from:
 
 1.  r = 0: value under test column is more than value under 5pct column (statistically significant) and we have at least one cointegrating relationship.
 
-2.  r \<= 1: value under test column is more than value under 5pct column (statistically insignificant) and we have more than one cointegrating relationship.
+2.  r <= 1: value under test column is more than value under 5pct column (statistically significant) and we have at least one cointegrating relationship.
 
-3.  r \<= 2: value under test column is less than value under 5pct column (statistically insignificant) and we have at most two cointegrating relationship.
+3.  r <= 2: value under test column is less than value under 5pct column (statistically insignificant) and we have at most two cointegrating relationship.
 
-Since we have found cointegrating relationships through the Johansen Test, we can estimate a ECM or VECM model.
+Since we have found evidence of cointegration through the Johansen Test, we can estimate a ECM or VECM model.
 
 ## 9.1 Error Correction Model
 
@@ -750,7 +759,7 @@ ardl_lr <- ardl_lr_lag$best_model
 summary(ardl_lr)
 ```
 
-Instead of extracting the residuals, we can use the **`uecm`** and **`recm`** functions to get the unrestricted and restricted ECMs. The first model will show all the coefficients for the long-run and short-run variables, while the second will only show the short-run variables with the ECT.
+Instead of extracting the residuals, we can use the **`uecm`** and **`recm`** functions to get the unrestricted and restricted form of the ECM. The first model will show all the coefficients for the long-run and short-run variables, while the second will only show the short-run variables with the ECT.
 
 ```{r uecm}
 un_ecm <- ARDL::uecm(ardl_lr)
@@ -822,7 +831,7 @@ vec_ecm <- cajorls(get_vecm, r = 2)
 
 kable(tidy(vec_ecm$rlm), format = "pipe",
       caption = "Estimates of 3-Equation Vector Error Correction Model",
-      digits = 3)
+      digits = 4)
 ```
 
 The output shows the coefficients under the `estimate` column of each variable under the `term` column. The 3 equations in the VECM are:
@@ -848,38 +857,114 @@ $$
 plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "d.CPI", xlab = "Time",
-     main = "Actual vs Fitted CPI at First Difference Using VAR")
+     main = "Actual vs Fitted CPI at First Difference Using VECM")
 
 # Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
 lines(ts(fitted(vec_ecm$rlm)[,"CPI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
-
-lines(ts(fitted(var$varresult$d.CPI), start = c(1978, 4), frequency = 4), col = "green", type = "l", lwd = 3)
 
 legend(x = "bottomleft", legend = c("Actual d.CPI", "vecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
+```{r plot vecm dspi}
+plot(ts(diff.train$d.DSPI, start = c(1978, 2), frequency = 4),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.DSPI", xlab = "Time",
+     main = "Actual vs Fitted DSPI at First Difference Using VECM")
 
+# Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
+lines(ts(fitted(vec_ecm$rlm)[,"DSPI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
+legend(x = "bottomleft", legend = c("Actual d.DSPI", "vecm"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
 
+```{r plot vecm cli}
+plot(ts(diff.train$d.CLI, start = c(1978, 2), frequency = 4),
+     col = "darkblue", type = "l", lwd = 3,
+     ylab = "d.CLI", xlab = "Time",
+     main = "Actual vs Fitted CLI at First Difference Using VECM")
+
+# Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
+lines(ts(fitted(vec_ecm$rlm)[,"CLI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+
+legend(x = "bottomleft", legend = c("Actual d.CLI", "vecm"),
+       col = c("darkblue", "red"), lwd = 1.5)
+```
+
+We can also convert the VECM in differences to a VAR in levels using the **`vec2var`** function, which is particularly useful when we are forecasting since it gives us the output in levels.
+
+```{r vec2var}
+var_ecm <- vec2var(get_vecm, r = 2)
+
+(var_ecm)
+```
 
 # 10 Post-Estimation Tests
 
-Two common problems encountered in time series analysis are serial correlation of errors and heteroskedastic errors. These can affect our analysis as estimators are no longer efficient and the usual test statistics become unreliable, which can be important if inference is the main purpose. The Breusch-Godfrey Test using the function **`bgtest`** can be used to test for serial correlation, while the Breusch-Pagan Test using **`bptest`** can be used to test for heteroskedasticity. Both functions can be found in the **`lmtest`** package.
+Two common problems encountered in time series analysis are serial correlation of errors and heteroskedastic errors. These can affect our analysis as estimators are no longer efficient and the usual test statistics become unreliable, which can be important if inference is the main purpose. The Breusch-Godfrey Test can be used to test for serial correlation, while the Breusch-Pagan Test can be used to test for heteroskedasticity. However, there is no single package that could accommodate different models for these tests, so we will have to use different functions from different packages for the models that are accepted.
 
-```{r}
+However, using Newey-West standard errors to obtain the corrected test statistics regardless of whether serial correlation and/or heteroskedasticity is present seems to be an acceptable method, especially when we have large sample sizes.
 
+## 10.1 ARDL Model
+
+We can use the **`bgtest`** and **`bptest`** from the **`lmtest`** package.
+
+```{r bg ardl}
+# Test with up to 4 lags of the residuals
+
+lmtest::bgtest(ardl, order = 4)
 ```
 
+```{r bp ardl}
+lmtest::bptest(ardl, studentize = T)
+```
 
+There is serial correlation and heteroskedasticity in the ARDL residuals, and we should use the Newey-West (Heteroskedasticity and Autocorrelation Corrected) standard errors to obtain the correct test statistics for inference.
 
+## 10.2 VAR Model
 
+The functions that can be applied to VAR models are **`serial.test`** and the **`arch.test`** from the **`vars`** package. The **`arch.test`** performs the ARCH test to detect if there is changing conditional variance in a time series, unlike the Breusch-Pagan test that detects for constant variance.
 
+```{r bg var}
+vars::serial.test(var, lags.bg = 4, type = "BG")
+```
 
+```{r arch var}
+vars::arch.test(var, lags.single = 4, lags.multi = 4, multivariate.only = F)
+```
 
+From the tests, there are was no serial correlation detected at up to 4 lags of the error term, and only `d.CPI` and the overall VAR models has ARCH effects. 
+
+## 10.3 VECM
+
+```{r bg vecm}
+vars::serial.test(var_ecm, lags.bg = 4, type = "BG")
+```
+
+```{r arch vecm}
+vars::arch.test(var_ecm, lags.single = 4, lags.multi = 4, multivariate.only = F)
+```
+
+Similar to the tests for the VAR model, there is no serial correlation detected at up to 4 lags of the error terms and only the `CPI` single equation and the multivariate model has ARCH effects. 
 
 # 11 Forecasting and Evaluation
 
+For the forecast and evaluation, I would compare to the data at levels in the `test` dataset. I would forecast 4 periods and 8 periods ahead, to test the forecasting power of the different models at different lengths of time. However, there are two points to keep in mind. 
+
+Firstly, the models were built using first-differenced data, so we will need to convert it back to levels after forecasting. This can be done easily by taking the last observation from the `train` dataset and adding the forecasting values. The only exception would be the `vec_ecm` model, which requires conversion to the VAR in levels (`var_ecm` model) so that it can be forecasted. 
+
+Secondly, models such as ARIMA and VAR uses endogenous variable but ARDL models contains exogenous variables. This means that we would need data on the exogenous variables in the ARDL models for the forecasting to work. This can be done through the use of ARIMA models to predict exogenous variables before inputting them into the ARDL forecast. However, for simplicity, I would use the data in the `test` set to compare the performance of the ARDL and ARDL-EC models while ARIMA and VAR/VECM would be compared to one another.
+
+The forecast can be obtained using the **`predict`** function from base R, which requires the number of steps ahead to forecast and new data if needed, such as for the ARDL models. THe **`forecast`** function from the **`forecast`** package can also do the same, but it does not seem to work with VAR models.
+
+I have created the first-differenced test dataset in the R chunk below, which is the new data required for forecasting ARDL models.
+
+```{r diff test}
+diff.test <- diff(test) %>% na.omit()
+
+diff.test
+```
 
 
 
