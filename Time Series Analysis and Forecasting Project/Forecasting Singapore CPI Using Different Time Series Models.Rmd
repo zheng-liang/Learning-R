@@ -26,9 +26,10 @@ library(knitr)
 library(stargazer)
 
 # Packages that will be needed for the main parts of the project
-library(ARDL) # For ARDL models
+library(ARDL) # For ARDL models lag selection
 library(bruceR) # For multivariate granger causality test
 library(corrplot) # For visualizing correlation between variables
+library(dLagM) # For creating ARDL objects that can work with a forecast function
 library(forecast) # For ARIMA models, forecasting and evaluation
 library(lmtest) # For tests such as Breusch-Godfrey, Breusch-Pagan
 library(lubridate) # For working with dates
@@ -305,7 +306,7 @@ Before we continue with any serious analysis, it would be better to split our da
 ```{r split data}
 train <- data["/2019"]
 
-test <- data["2019-12/"] # Need the last observation in 2019 so that when we difference the data, we can avoid the NAs
+test <- data["2020/"]
 ```
 
 # 6 Unit Root Test for Stationarity
@@ -374,12 +375,18 @@ We rejected the null in the ADF test, and do not reject the null in the KPSS tes
 ```{r diff data}
 # By default, the diff function uses lag = 1 and differences = 1
 
-diff.train <- diff(train) %>%
-  `colnames<-`(c("d.CPI", "d.DSPI", "d.CLI"))
+diff.data <- diff(data) %>%
+  `colnames<-`(c("dCPI", "dDSPI", "dCLI"))
 
-head(diff.train) # First observation removed because we cannot take difference on it. 
+head(diff.data) # First observation removed because we cannot take difference on it. 
 
-diff.train <- na.omit(diff.train)
+diff.data <- na.omit(diff.data)
+
+# Split the train and test sets again
+
+diff.train <- diff.data["/2019"]
+
+diff.test <- diff.data["2020/"]
 ```
 
 ```{r plot diff data}
@@ -395,31 +402,31 @@ The following R chunks performs the ADF test on the first-differenced variables.
 # After differencing, there should be no deterministic trend in the plots, but it may contain drift terms (especially dealing with non-zero means)
 # KPSS test null hypothesis is that variables are stationary with deterministic parts, so just indicate type = "mu"
 
-diff.train$d.CPI %>%
+diff.train$dCPI %>%
   ur.df(type = "drift", selectlags = "AIC") %>%
   summary()
 
-diff.train$d.CPI %>%
+diff.train$dCPI %>%
   ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
 
 ```{r adf ddspi}
-diff.train$d.DSPI %>%
+diff.train$dDSPI %>%
   ur.df(type = "none", selectlags = "AIC") %>%
   summary()
 
-diff.train$d.DSPI %>%
+diff.train$dDSPI %>%
   ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
 
 ```{r adf dcli}
-diff.train$d.CLI %>%
+diff.train$dCLI %>%
   ur.df(type = "drift", selectlags = "AIC") %>%
   summary()
 
-diff.train$d.CLI %>%
+diff.train$dCLI %>%
   ur.kpss(type = "mu", lags = "short") %>%
   summary()
 ```
@@ -429,7 +436,7 @@ Since the ADF tau-statistic for all variables are less than the critical tau-val
 After taking the first difference, we can see that the interaction between variables have changed in the scatterplot matrix and the correlation matrix.
 
 ```{r scatplot diff train}
-pairs(~ d.CPI + d.DSPI + d.CLI, 
+pairs(~ dCPI + dDSPI + dCLI, 
       data = diff.train,
       lower.panel = NULL,
       main = "Scatterplot Matrix of First Differenced Variables")
@@ -475,9 +482,9 @@ This can be written simply as ARIMA(p, d, q). In Section 6, I had tested that th
 ```{r acf pacf}
 par(mfrow = c(2,1), mar = c(2, 2, 4, 2))
 
-forecast::Acf(x = diff.train$d.CPI, main = "ACF of d.CPI")
+forecast::Acf(x = diff.train$dCPI, main = "ACF of dCPI")
 
-forecast::Pacf(x = diff.train$d.CPI, main = "PACF of d.CPI")
+forecast::Pacf(x = diff.train$dCPI, main = "PACF of dCPI")
 ```
 
 We can gauge/estimate the q lags of the error term using the ACF where spikes are above the blue dotted line and similarly, p lags of the dependent variable using the PACF. Usually, the first spike in the ACF plot refers to lag 0, but the **`forecast`** package removes and we can use the first spike as lag 1 instead. In this case, we might want to try to fit a ARIMA(1, 1, 4) model using the **`Arima`** function in **`forecast`** package.
@@ -487,7 +494,7 @@ We can gauge/estimate the q lags of the error term using the ACF where spikes ar
 # d = 0 as we are using the differenced data
 # method for estimation is to use maximum likelihood
 
-arima1 <- forecast::Arima(diff.train$d.CPI, 
+arima1 <- forecast::Arima(diff.train$dCPI, 
                           order = c(1, 0, 4),
                           method = "ML")
 
@@ -507,7 +514,7 @@ $$
 How well does our manually selected model compare against a model selected automatically using the lowest Akaike Information Criterion? We can estimate such a model using the **`auto.arima`** function. We have many arguments that we should include: `seasonal` should be set to False since I am not estimating a seasonal ARIMA, `stepwise` and `approximation` should be set to False to obtain a more accurate model selection, `ic` set to AIC, and `trace` set to False to suppress the running of the models by the automatic selection.
 
 ```{r auto arima}
-arima2 <- forecast::auto.arima(diff.train$d.CPI, 
+arima2 <- forecast::auto.arima(diff.train$dCPI, 
                                seasonal = F, 
                                ic = "aic", 
                                stepwise = F, 
@@ -522,9 +529,9 @@ We can see that the model automatically selected using the lowest AIC is the dif
 
 ```{r plot arima}
 # indicated xlim to zoom into the chart to have a better view of the patterns
-plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dCPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.CPI", main = "Actual vs Fitted CPI at First Difference Using ARIMA",
+     ylab = "dCPI", main = "Actual vs Fitted CPI at First Difference Using ARIMA",
      xlim = c(1990, 2019))
 
 lines(ts(fitted(arima1), start = c(1978, 2), frequency = 4), col = "red", type = "l", lwd = 3)
@@ -533,7 +540,7 @@ lines(ts(fitted(arima2), start = c(1978, 2), frequency = 4), col = "gray", type 
 
 abline(h = arima2$coef[4], col = "black", lwd = 2)
 
-legend(x = "topright", legend = c("Actual d.CPI", "arima1", "arima2", "Mean from arima2"),
+legend(x = "topright", legend = c("Actual dCPI", "arima1", "arima2", "Mean from arima2"),
        col = c("darkblue", "red", "gray", "black"), lwd = 1.5)
 ```
 
@@ -556,7 +563,7 @@ In our case, we have more than 1 explanatory variables but the same concept appl
 # possible to state a vector of length equal to no. of variables in max_order
 # grid = T to to prevent stepwise search of models
 
-ardl_lag <- ARDL::auto_ardl(formula = d.CPI ~ d.DSPI + d.CLI,
+ardl_lag <- ARDL::auto_ardl(formula = dCPI ~ dDSPI + dCLI,
                             data = as.zoo(diff.train),
                             max_order = 4, grid = T,
                             selection = "AIC")
@@ -564,7 +571,7 @@ ardl_lag <- ARDL::auto_ardl(formula = d.CPI ~ d.DSPI + d.CLI,
 # Obtain the best lag order, arranged by how variables were entered in the formula argument
 ardl_lag$best_order
 
-# Save the best model selected by the auto ardl function
+# Save the coefficients of the model selected by auto_ardl
 ardl <- ardl_lag$best_model
 
 summary(ardl)
@@ -581,15 +588,15 @@ AIC(ardl)
 The log-likelihood is much higher and AIC much lower than the `arima2` model estimated in Section 9.1, which should indicate a better fit.
 
 ```{r plot ardl}
-plot.zoo(diff.train$d.CPI,
+plot.zoo(diff.train$dCPI,
          col = "darkblue", type = "l", lwd = 3,
-         ylab = "d.CPI", xlab = "Time",
+         ylab = "dCPI", xlab = "Time",
          main = "Actual vs Fitted CPI at First Difference Using ARDL",
          xlim = c(1990, 2019))
 
 lines(fitted(ardl), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.CPI", "ardl"),
+legend(x = "bottomleft", legend = c("Actual dCPI", "ardl"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
@@ -628,50 +635,50 @@ var <- vars::VAR(y = diff.train,
 
 stargazer(var$varresult, 
           type = "text", 
-          title = "VAR Estimation Result for d.CPI, d.DSPI, d.CLI", 
+          title = "VAR Estimation Result for dCPI, dDSPI, dCLI", 
           digits = 3, 
-          column.labels = c("d.CPI", "d.DSPI", "d.CLI"),
+          column.labels = c("dCPI", "dDSPI", "dCLI"),
           dep.var.labels.include = F)
 ```
 
 The output shows the three equations, one for each variable, with 2 lags of each variable. Therefore, the model gets really big as more variables and lags are added, which can become a problem.
 
 ```{r plot var dcpi}
-plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dCPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.CPI", xlab = "Time",
+     ylab = "dCPI", xlab = "Time",
      main = "Actual vs Fitted CPI at First Difference Using VAR")
 
 # Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
-lines(ts(fitted(var$varresult$d.CPI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+lines(ts(fitted(var$varresult$dCPI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.CPI", "var"),
+legend(x = "bottomleft", legend = c("Actual dCPI", "var"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
 An advantage of models like VAR is that we can also plot the predicted values of other variables that are in the model.
 
 ```{r plot var ddspi}
-plot(ts(diff.train$d.DSPI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dDSPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.DSPI", xlab = "Time",
+     ylab = "dDSPI", xlab = "Time",
      main = "Actual vs Fitted DSPI at First Difference Using VAR")
 
-lines(ts(fitted(var$varresult$d.DSPI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+lines(ts(fitted(var$varresult$dDSPI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.DSPI", "var"),
+legend(x = "bottomleft", legend = c("Actual dDSPI", "var"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
 ```{r plot var dcli}
-plot(ts(diff.train$d.CLI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dCLI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.CLI", xlab = "Time",
+     ylab = "dCLI", xlab = "Time",
      main = "Actual vs Fitted CLI at First Difference Using VAR")
 
-lines(ts(fitted(var$varresult$d.CLI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
+lines(ts(fitted(var$varresult$dCLI), start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.CLI", "var"),
+legend(x = "bottomleft", legend = c("Actual dCLI", "var"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
@@ -694,7 +701,7 @@ With two variables, we can test if $x$ granger-causes $y$, $y$ granger-causes $x
 granger_causality(varmodel = var)
 ```
 
-The output provides both F-test and Likelihood Ratio Test values. Given the significance level of 5%, `d.DSPI` and `d.CLI` granger-cause `d.CPI` and `d.DSPI` granger-causes `d.CLI`. None of the variables granger-cause `d.DSPI` and we did not find any bi-directional causality. It may be that the wrong number of lags was chosen or simply that lags of other variables does not help in predicting other variables. In such cases, the forecasting power of this model may be affected since these variables are inter-dependent on one another.
+The output provides both F-test and Likelihood Ratio Test values. Given the significance level of 5%, `dDSPI` and `dCLI` granger-cause `dCPI` and `dDSPI` granger-causes `dCLI`. None of the variables granger-cause `dDSPI` and we did not find any bi-directional causality. It may be that the wrong number of lags was chosen or simply that lags of other variables does not help in predicting other variables. In such cases, the forecasting power of this model may be affected since these variables are inter-dependent on one another.
 
 # 9 Johansen Test for Cointegration
 
@@ -797,13 +804,13 @@ $$
 $$
 
 ```{r plot ardl ecm}
-plot.zoo(diff.train$d.CPI, col = "darkblue", type = "l", lwd = 3,
-         ylab = "d.CPI", xlab = "Time",
+plot.zoo(diff.train$dCPI, col = "darkblue", type = "l", lwd = 3,
+         ylab = "dCPI", xlab = "Time",
          main = "Actual vs Fitted CPI at First Difference Using ARDL-ECM")
 
 lines(fitted(r_ecm), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.CPI", "ardl-ecm"),
+legend(x = "bottomleft", legend = c("Actual dCPI", "ardl-ecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
@@ -854,41 +861,41 @@ $$
 $$
 
 ```{r plot vecm cpi}
-plot(ts(diff.train$d.CPI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dCPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.CPI", xlab = "Time",
+     ylab = "dCPI", xlab = "Time",
      main = "Actual vs Fitted CPI at First Difference Using VECM")
 
 # Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
 lines(ts(fitted(vec_ecm$rlm)[,"CPI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.CPI", "vecm"),
+legend(x = "bottomleft", legend = c("Actual dCPI", "vecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
 ```{r plot vecm dspi}
-plot(ts(diff.train$d.DSPI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dDSPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.DSPI", xlab = "Time",
+     ylab = "dDSPI", xlab = "Time",
      main = "Actual vs Fitted DSPI at First Difference Using VECM")
 
 # Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
 lines(ts(fitted(vec_ecm$rlm)[,"DSPI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.DSPI", "vecm"),
+legend(x = "bottomleft", legend = c("Actual dDSPI", "vecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
 ```{r plot vecm cli}
-plot(ts(diff.train$d.CLI, start = c(1978, 2), frequency = 4),
+plot(ts(diff.train$dCLI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
-     ylab = "d.CLI", xlab = "Time",
+     ylab = "dCLI", xlab = "Time",
      main = "Actual vs Fitted CLI at First Difference Using VECM")
 
 # Start period is 1978Q4 since we used 2 lags, resulting in loss of first 2 observations
 lines(ts(fitted(vec_ecm$rlm)[,"CLI.d"], start = c(1978, 4), frequency = 4), col = "red", type = "l", lwd = 3)
 
-legend(x = "bottomleft", legend = c("Actual d.CLI", "vecm"),
+legend(x = "bottomleft", legend = c("Actual dCLI", "vecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
@@ -934,7 +941,7 @@ vars::serial.test(var, lags.bg = 4, type = "BG")
 vars::arch.test(var, lags.single = 4, lags.multi = 4, multivariate.only = F)
 ```
 
-From the tests, there are was no serial correlation detected at up to 4 lags of the error term, and only `d.CPI` and the overall VAR models has ARCH effects. 
+From the tests, there are was no serial correlation detected at up to 4 lags of the error term, and only `dCPI` and the overall VAR models has ARCH effects. 
 
 ## 10.3 VECM
 
@@ -950,24 +957,259 @@ Similar to the tests for the VAR model, there is no serial correlation detected 
 
 # 11 Forecasting and Evaluation
 
-For the forecast and evaluation, I would compare to the data at levels in the `test` dataset. I would forecast 4 periods and 8 periods ahead, to test the forecasting power of the different models at different lengths of time. However, there are two points to keep in mind. 
+For the forecast and evaluation, I would compare the data at first difference in the `diff.test` dataset against the 8 period ahead forecasted values. This would mean that the forecasted values are for the periods 2020 Q1 to 2021 Q4. I then plotted the actual vs forecasted values at levels to see how well the different models fit. However, there are two points to keep in mind. 
 
-Firstly, the models were built using first-differenced data, so we will need to convert it back to levels after forecasting. This can be done easily by taking the last observation from the `train` dataset and adding the forecasting values. The only exception would be the `vec_ecm` model, which requires conversion to the VAR in levels (`var_ecm` model) so that it can be forecasted. 
+Firstly, the forecasted values will be in first-difference. Conversion to levels will be needed, which can be obtained simply by adding the cumulative forecasted values to the last observation used in the `diff.train` dataset.
 
-Secondly, models such as ARIMA and VAR uses endogenous variable but ARDL models contains exogenous variables. This means that we would need data on the exogenous variables in the ARDL models for the forecasting to work. This can be done through the use of ARIMA models to predict exogenous variables before inputting them into the ARDL forecast. However, for simplicity, I would use the data in the `test` set to compare the performance of the ARDL and ARDL-EC models while ARIMA and VAR/VECM would be compared to one another.
+Secondly, models such as ARIMA and VAR uses endogenous variable but ARDL models contains exogenous variables. This means that we would need data on the exogenous variables in the ARDL models for the forecasting to work. This can be done through the use of ARIMA models to predict exogenous variables before inputting them into the ARDL forecast. However, for simplicity, I would use the data in the `diff.test` set to compare the performance of the ARDL and ARDL-EC models while ARIMA and VAR/VECM would be compared to one another.
 
-The forecast can be obtained using the **`predict`** function from base R, which requires the number of steps ahead to forecast and new data if needed, such as for the ARDL models. THe **`forecast`** function from the **`forecast`** package can also do the same, but it does not seem to work with VAR models.
+For the ARIMA models, we can generate forecast values using the **`forecast`** function in the **`forecast`** package. For ARDL, we would need to use the **`dLagM`** package and for ARCL-ECM we need to use the **`ecm`** package as they have their own forecast functions. For VAR and VECM models, we need to use the **`predict`** function from the base R package. 
 
-I have created the first-differenced test dataset in the R chunk below, which is the new data required for forecasting ARDL models.
+## 11.1 Forecast Performance of ARIMA Models
 
-```{r diff test}
-diff.test <- diff(test) %>% na.omit()
+```{r arima1 h8}
+arima1_h8 <- forecast(object = arima1, h = 8, level = 95)
 
-diff.test
+stargazer(as.data.frame(arima1_h8), 
+          type = "text",
+          title = "Forecasted dCPI 2020Q1 to 2021Q4 Using arima1 Model", 
+          summary = F)
+
+stargazer(accuracy(object = arima1_h8, x = diff.test["2020/2021"]$dCPI), 
+          type = "text", 
+          title = "Accuracy Measures of arima1 Model for 8-Steps Ahead Forecasting")
 ```
 
+R simply refers to the row number of the observations and does not correct the dates assigned to each observation after the use of lags in the models as can be seen in the table of the forecasted `dCPI` values. It would be important to take note of this point when plotting the forecasted values.
 
+The accuracy measures Root Mean Squared Error (RMSE), Mean Absolute Error (MAE) and Mean Absolute Scaled Error (MASE) can be compared across models and lower values would indicate better out-of-sample forecast. The Mean Absolute Percentage Error (MAPE) can also be used, but may not be useful in cases where we might have zeroes in data. For the out-of-sample forecast, we are interested in the accuracy measures of the `Test set` row.
 
+```{r plot f_arima1}
+fcpi_arima1 <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(arima1_h8$mean),
+                     fcpi_lower = as.vector(last(train$CPI)) + cumsum(arima1_h8$lower),
+                     fcpi_upper = as.vector(last(train$CPI)) + cumsum(arima1_h8$upper)),
+                  start = c(2020, 1),
+                  frequency = 4)
+
+plot.zoo(cbind(as.zoo(fcpi_arima1), test$CPI["2020/2021",], train$CPI["2016/2019"]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 3,
+         ylab = "CPI", xlab = "Year/Quarter",
+         main = "Actual and Forecasted CPI Using Model arima1")
+
+legend(x = "topleft", 
+       legend = c("Forecasted CPI", "Lower and Upper Bound", "Actual CPI 1Q20 to 4Q21", "Actual CPI 1Q16 to 4Q19"), 
+       col = c("red", "gray", "blue", "black"), 
+       lwd = 1.5)
+```
+
+For model `arima2`, I suppressed the code to reduce the length of the document since it is similar to what I did for model `arima1`.
+
+```{r arima2 h8, echo=FALSE}
+arima2_h8 <- forecast(object = arima2, h = 8, level = 95)
+
+stargazer(as.data.frame(arima2_h8), 
+          type = "text",
+          title = "Forecasted dCPI 2020Q1 to 2021Q4 Using arima2 Model", 
+          summary = F)
+
+stargazer(accuracy(object = arima2_h8, x = diff.test["2020/2021"]$dCPI), 
+          type = "text", 
+          title = "Accuracy Measures of arima2 Model for 8-Steps Ahead Forecasting")
+```
+
+```{r plot f_arima2, echo=FALSE}
+fcpi_arima2 <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(arima2_h8$mean),
+                     fcpi_lower = as.vector(last(train$CPI)) + cumsum(arima2_h8$lower),
+                     fcpi_upper = as.vector(last(train$CPI)) + cumsum(arima2_h8$upper)),
+                  start = c(2020, 1),
+                  frequency = 4)
+
+plot.zoo(cbind(as.zoo(fcpi_arima2), test$CPI["2020/2021",], train$CPI["2016/2019"]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 3,
+         ylab = "CPI", xlab = "Year/Quarter",
+         main = "Actual and Forecasted CPI Using Model arima2")
+
+legend(x = "topleft", 
+       legend = c("Forecasted CPI", "Lower and Upper Bound", "Actual CPI 1Q20 to 4Q21", "Actual CPI 1Q16 to 4Q19"), 
+       col = c("red", "gray", "blue", "black"), 
+       lwd = 1.5)
+```
+
+There seemed to be negligible differences between the models `arima1` and `arima2`, so it might be better to go with the simpler `arima2` when using ARIMA models for forecasting Singapore CPI.
+
+## 11.2 Forecast Performance of ARDL and ARDL-EC Models
+
+To forecast the ARDL and ARDL-EC models, we need values for the exogenous variables. However, as there are lags in the model as well, **`forecast`** and **`predict`** functions do not work well with the underlying **`dynlm`** objects of these models. To resolve this, we have to use the **`dLagM`** package function **`ardlDlm`** to fit the ARDL model. The **`dLagM`** package also contains its own **`forecast`** function.
+
+```{r ardl h8}
+ardl.new <- ardlDlm(formula = dCPI ~ dDSPI + dCLI, # Indicate variables for the ARDL model
+                    data = data.frame(diff.train), 
+                    p = 2, q = 4, # Include 2 lags for exogenous variables, 4 lags for dependent variable
+                    remove = list(p = list(dDSPI = c(2)))) # Remove second lag for dDSPI so that model is same as auto_ardl
+
+stargazer(ardl.new$model, type = "text",
+          title = "ARDL Regression Using dLagM Package", 
+          dep.var.labels.include = F, 
+          column.labels = "CPI.t")
+
+x.new <- rbind(as.vector(diff.test["2020/2021", 2]), as.vector(diff.test["2020/2021", 3])) # function only accepts new data in matrix class
+
+ardl_h8 <- dLagM::forecast(model = ardl.new, x = x.new, h = 8, interval = T, level = 0.95)
+
+stargazer(ardl_h8$forecasts, 
+          type = "text",
+          title = "Forecasted dCPI 2020Q1 to 2021Q4 Using ardl Model", 
+          summary = F)
+
+# To use the accuracy function in the forecast package, we need to trick it into thinking it is a object of class "forecast"
+
+ardl_h8adj <- structure(list(level = 95,
+                             mean = ardl_h8$forecasts$Forecast, 
+                             lower = ardl_h8$forecasts$`95% LB`, 
+                             upper = ardl_h8$forecasts$`95% UB`, 
+                             x = diff.train[, 1], 
+                             fitted = c(rep(NA, 4), ardl.new$model$fitted.values),
+                             residuals = c(rep(NA, 4), ardl.new$model$residuals)), 
+                        class = "forecast")
+
+stargazer(accuracy(object = ardl_h8adj, x = diff.test["2020/2021"]$dCPI), 
+          type = "text", 
+          title = "Accuracy Measures of ardl Model for 8-Steps Ahead Forecasting")
+```
+
+```{r plot f_ardl}
+fcpi_ardl <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(ardl_h8adj$mean),
+                      fcpi_lower = as.vector(last(train$CPI)) + cumsum(ardl_h8adj$lower),
+                      fcpi_upper = as.vector(last(train$CPI)) + cumsum(ardl_h8adj$upper)),
+                start = c(2020, 1),
+                frequency = 4)
+
+plot.zoo(cbind(as.zoo(fcpi_ardl), test$CPI["2020/2021",], train$CPI["2016/2019"]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 3,
+         ylab = "CPI", xlab = "Year/Quarter",
+         main = "Actual and Forecasted CPI Using Model ardl")
+
+legend(x = "topleft", 
+       legend = c("Forecasted CPI", "Lower and Upper Bound", "Actual CPI 1Q20 to 4Q21", "Actual CPI 1Q16 to 4Q19"), 
+       col = c("red", "gray", "blue", "black"), 
+       lwd = 1.5)
+```
+
+For the ARDL-ECM, since we have found cointegration we could simply obtain the forecast in levels since there is a long-run model `ardl_lr`. Of course, there will still be a need to model and forecast it using the **`dLagM`** package for it to work.
+
+```{r ardl ecm h8}
+ardlecm.new <- dLagM::ardlDlm(formula = CPI ~ DSPI + CLI, data = data.frame(train), p = 2, q = 3)
+
+stargazer(ardlecm.new$model, 
+          type = "text",
+          title = "ECM Regression Using dLagM Package", 
+          dep.var.labels.include = F, 
+          column.labels = "CPI.t")
+
+newdata <- rbind(as.vector(test["2020/2021", 2]), as.vector(test["2020/2021", 3]))
+
+ecm_h8 <- dLagM::forecast(model = ardlecm.new, x = newdata, h = 8, interval = T, level = 0.95)
+
+stargazer(ecm_h8$forecasts, 
+          type = "text",
+          title = "Forecasted dCPI 2020Q1 to 2021Q4 Using ecm Model", 
+          summary = F)
+
+# Since forecast values are CPI at level, we cannot directly compare to the accuracy measures of other models since they have different scales
+# We can get the first difference CPI by taking the difference of the forecasted values
+
+dcpi_ecm <- data.frame(fcst = na.omit(diff(append(ecm_h8$forecasts$Forecast, as.vector(last(train$CPI)), 0))),
+                       lowerb = na.omit(diff(append(ecm_h8$forecasts$`95% LB`, as.vector(last(train$CPI)), 0))),
+                       upperb = na.omit(diff(append(ecm_h8$forecasts$`95% UB`, as.vector(last(train$CPI)), 0))))
+
+# Creating structure of class "forecast" that can be used with the accuracy function
+
+ecm_h8adj <- structure(list(level = 95,
+                            mean = dcpi_ecm$fcst,
+                            lower = dcpi_ecm$lowerb,
+                            upper = dcpi_ecm$upperb,
+                            x = diff.train[, 1],
+                            fitted = c(rep(NA, 2), r_ecm$fitted.values),
+                            residuals = c(rep(NA, 2), r_ecm$residuals)),
+                       class = "forecast")
+
+stargazer(accuracy(object = ecm_h8adj, x = diff.test["2020/2021"]$dCPI), 
+          type = "text", 
+          title = "Accuracy Measures of ecm Model for 8-Steps Ahead Forecasting")
+```
+
+```{r plot ecm}
+fcpi_ecm <- ts(cbind(fcpi = ecm_h8$forecasts$Forecast,
+                     fcpi_lower = ecm_h8$forecasts$`95% LB`,
+                     fcpi_upper = ecm_h8$forecasts$`95% UB`),
+               start = c(2020, 1),
+               frequency = 4)
+
+plot.zoo(cbind(as.zoo(fcpi_ecm), test$CPI["2020/2021",], train$CPI["2016/2019"]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 3,
+         ylab = "CPI", xlab = "Year/Quarter",
+         main = "Actual and Forecasted CPI Using Model ardl-ecm")
+
+legend(x = "topleft", 
+       legend = c("Forecasted CPI", "Lower and Upper Bound", "Actual CPI 1Q20 to 4Q21", "Actual CPI 1Q16 to 4Q19"), 
+       col = c("red", "gray", "blue", "black"), 
+       lwd = 1.5)
+```
+
+## 11.3 Forecast Performance of VAR and VEC Models
+
+Forecasting VAR and VEC models is much simpler that for ARDL and ARDL-EC models in R. It simply requires the **`predict`** function in base R. However, we still need to create a list object of class `forecast` that works with the **`accuracy`** function.
+
+```{r var h8}
+var_h8 <- predict(object = var, n.ahead = 8, ci = 0.95)
+
+stargazer(var_h8$fcst, 
+          type = "text", 
+          title = c("Forecasted dCPI from 1Q20 to 4Q21", "Forecasted dDSPI from 1Q20 to 4Q21", "Forecasted dCLI from 1Q20 to 4Q21"))
+
+# Creating structure of class "forecast" that can be used with the accuracy function
+
+var_acc_list <- list()
+
+for (i in 1:3) {
+  fc <- structure(list(level = 95,
+                       mean = var_h8$fcst[[i]][,"fcst"],
+                       lower = var_h8$fcst[[i]][,"lower"],
+                       upper = var_h8$fcst[[i]][,"upper"],
+                       x = diff.train[,i],
+                       fitted = c(NA, NA, fitted(var)[,i]),
+                       residuals = c(NA, NA, resid(var)[,i])),
+                  class = "forecast")
+  
+  name <- paste(names(var_h8$fcst[i]), "_acc", sep = "") 
+  
+  var_acc_list[[name]] <- fc
+}
+
+stargazer(accuracy(object = var_acc_list$dCPI_acc, x = diff.test["2020/2021"]$dCPI), 
+          type = "text", 
+          title = "Accuracy Measures of var Model for 8-Steps Ahead Forecasting for dCPI")
+
+stargazer(accuracy(object = var_acc_list$dDSPI_acc, x = diff.test["2020/2021"]$dDSPI), 
+          type = "text", 
+          title = "Accuracy Measures of var Model for 8-Steps Ahead Forecasting for dDSPI")
+
+stargazer(accuracy(object = var_acc_list$dCLI_acc, x = diff.test["2020/2021"]$dCLI), 
+          type = "text", 
+          title = "Accuracy Measures of var Model for 8-Steps Ahead Forecasting for dCLI")
+```
+
+```{r plot f_var}
+fcpi_arima2 <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(arima2_h8$mean),
+                     fcpi_lower = as.vector(last(train$CPI)) + cumsum(arima2_h8$lower),
+                     fcpi_upper = as.vector(last(train$CPI)) + cumsum(arima2_h8$upper)),
+                  start = c(2020, 1),
+                  frequency = 4)
+```
 
 
 
