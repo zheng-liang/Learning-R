@@ -1,19 +1,21 @@
 ---
 title: "Forecasting Singapore's Consumer Price Index Using Different Time Series Models"
 output:
-  github_document:
+  html_document:
     toc: true
+    toc_float: true
+    code_folding: hide
 ---
 
-# 1 Introduction
+## 1 Introduction
 
-The purpose of this project is to introduce time series modelling and forecasting in R using a practical example. It covers the common tests that are done in time series analysis, such as unit root tests for stationarity, Breusch-Godfrey test for serial correlation, and Granger Causality test for determining whether variables are useful in forecasting other variables. The main models used in this project are the ARIMA, ARDL and VAR models, which will be discussed in detail in the later sections. However, I would not be tackling the issue of seasonality in this project as it will become a lengthy discussion. Instead, I would do this in a future project as I get familiar with the treatment of seasonal effects on time series and allow for comparison against the results I have documented here.
+The purpose of this project is to introduce time series modelling and forecasting in R using a practical example. It covers the common tests that are done in time series analysis, such as unit root tests for stationarity, Breusch-Godfrey test for serial correlation, and Granger Causality test for determining whether variables are useful in forecasting other variables. The main models used in this project are the ARIMA, ARDL and VAR models, which will be discussed in detail in the later sections. However, I would not be tackling the issue of seasonality in this project as it will become a lengthy discussion. Instead, I would do this in a future project as I get more familiar with the treatment of seasonal effects on time series and compare the results against the ones I have documented here.
 
 I attempted to forecast Singapore's Consumer Price Index (CPI) using the Producer Price Index (PPI) and the Composite Leading Index (CLI). The data used in this project was obtained from the Department of Statistics (DOS) Singapore and can be accessed from the [SingStat Table Builder](https://tablebuilder.singstat.gov.sg/). The data was imported via an API, but it can also be downloaded as an Excel or CSV file.
 
-# 2 Packages Required
+## 2 Packages Required
 
-```{r load packages, message=FALSE}
+```{r load packages, message=FALSE, warning=FALSE, results="hide", class.source = "fold-show"}
 # Use install.packages("packagename") if they are not already installed
 
 # Packages that will be needed for obtaining data via an API
@@ -39,7 +41,7 @@ library(xts) # For converting data to and working with xts objects
 library(vars) # For VAR models
 ```
 
-# 3 Importing Data Using API
+## 3 Importing Data Using API
 
 To import data using an API, we need to use the **`GET`** function in the `httr` package. We need to specify a URL to send a request for data retrieval. Websites that has an API usually has their own documentation on how to structure the parameters of the URL. For DOS Singapore, the documentation can be found [here](https://tablebuilder.singstat.gov.sg/view-api/for-developers).
 
@@ -80,7 +82,7 @@ names(cpi$Data)
 
 names(cpi$Data$row)
 
-head(lapply(cpi$Data$row$columns, head))
+head(lapply(cpi$Data$row$columns, dim))
 ```
 
 The `Data` list consists of the type of data and some of the values in each element. The elements `id`, `title`, `frequency`, etc. are the parameters or metadata from the API query. What we need is the `row` element. The `seriesNo` and `rowText`represents the class and sub-classes of items in the CPI basket, for example 1 refers to All Items, 1.0 refers to Food, and 1.1 refers to Food Excl Food Serving Services, etc. For our analysis, I am interested in the CPI - All Items, and due to a parameter in our URL specifying to only return the values under this category, we only have data for it as can be seen in the `columns` element. Due to the size of the `columns` list, I had to use the **`head`** function to simplify the output.
@@ -94,7 +96,10 @@ cpi_data <- as.data.frame(cpi$Data$row$columns[[1]])
 Let us take a look at `cpi_data`.
 
 ```{r cpidata}
-head(cpi_data, n = 4); tail(cpi_data, n = 4)
+stargazer(rbind(head(cpi_data, n = 8), tail(cpi_data, n = 8)),
+          type = "text",
+          title = "First and Last 8 Values in cpi data",
+          summary = F)
 ```
 
 We can see that the order of the data is based on the time observations but on the character values of the dates. To reorder the observations, we can use the functions in the **`lubridate`** and **`dplyr`** packages.
@@ -103,7 +108,10 @@ We can see that the order of the data is based on the time observations but on t
 cpi_data <- cpi_data %>% 
   dplyr::arrange(lubridate::ym(cpi_data$key))
 
-head(cpi_data, n = 4); tail(cpi_data, n = 4)
+stargazer(rbind(head(cpi_data, n = 8), tail(cpi_data, n = 8)),
+          type = "text",
+          title = "Adjusted First and Last 8 Values in cpi data",
+          summary = F)
 ```
 
 I have simplified the steps for data retrieval and conversion into data frame for the other variables of interest.
@@ -122,7 +130,10 @@ dspi_data <- as.data.frame(dspi$Data$row$columns[[1]])
 dspi_data <- dspi_data %>%
   dplyr::arrange(lubridate::ym(dspi_data$key))
 
-head(dspi_data, n = 4); tail(dspi_data, n = 4)
+stargazer(rbind(head(dspi_data, n = 8), tail(dspi_data, n = 8)),
+          type = "text",
+          title = "Adjusted First and Last 8 Values in dspi data",
+          summary = F)
 ```
 
 [Composite Leading Index (2015 = 100)](https://tablebuilder.singstat.gov.sg/table/TS/M240421):
@@ -138,10 +149,13 @@ cli_data <- as.data.frame(cli$Data$row$columns[[1]])
 
 # Data is ordered by the years and quarters so there was no need for reordering
 
-head(cli_data, n = 4); tail(cli_data, n = 4)
+stargazer(rbind(head(cli_data, n = 8), tail(cli_data, n = 8)),
+          type = "text",
+          title = "First and Last 8 Values in cli data",
+          summary = F)
 ```
 
-# 4 Exploratory Data Analysis
+## 4 Exploratory Data Analysis
 
 In this section, I provided more details about each variable and generated univariate and multivariate plots to find patterns in and interaction between the variables. To visualize the plots, rather than using a data frame object, it is best to convert them into an `xts` object. The conversion requires two arguments. First is the vector or matrix to be converted to xts object and a vector of the date. We have the dates in the data frame but they are not formatted as dates, so I used the **`yearmon`** and **`yearqtr`** functions to format them to the appropriate types.
 
@@ -169,7 +183,7 @@ storage.mode(dspi.xts) <- "numeric"
 storage.mode(cli.xts) <- "numeric"
 ```
 
-## 4.1 Consumer Price Index
+### 4.1 Consumer Price Index
 
 One of the widely-known and most watched indicator is the CPI as it can be used to determine the general inflation in a country. Inflation basically refers to the increase in general price levels of goods and services. Deflation (or negative inflation) would mean that the general price level of goods and services has fallen. The CPI measures the average price level of a basket of goods and services consumed by households, and the basket of goods is updated every five years in Singapore to better reflect the changing consumption habits. Due to the importance of the indicator, many economists in government or private business settings attempt to forecast it to formulate economic policies or business/investment decisions.
 
@@ -192,19 +206,19 @@ cpi_q.xts <- cpi_q.xts["1978-01/2022-03"]
 
 I have plotted the cleaned `cpi_q.xts`, which shows how the CPI has changed over time. We can see that the series is non-stationary, which could probably be solved by taking the first difference on the data. More about this in the next section.
 
-```{r plot cpi}
+```{r plot cpi, fig.align='center', echo=FALSE}
 plot.xts(cpi_q.xts, main = "Singapore Quarterly CPI from 1978Q1 to 2022Q1")
 ```
 
 I have also generated a boxplot of the range of CPI values of all years grouped by the quarters. It is hard to say if there are any differences between the quarters to indicate an effect of seasonality. However, since the data obtained was not seasonally-adjusted, we might want to consider adding seasonal dummies to our time series model. However, since seasonality is not the main purpose of this project, we may treat this as a factor for discussion in future research.
 
-```{r seasonality in cpi}
+```{r seasonality in cpi, fig.align='center', echo=FALSE}
 boxplot(cpi_q.xts ~ cycle(cpi_q.xts),
         ylab = "Quarterly CPI",
         xlab = "Quarters")
 ```
 
-## 4.2 Domestic Supply Price Index
+### 4.2 Domestic Supply Price Index
 
 There are 3 different measurements of the PPI in Singapore, namely the Domestic Supply Price Index, the Singapore Manufactured Products Price Index and the Services Producer Price Index. Here are the descriptions of each index:
 
@@ -228,19 +242,19 @@ dspi_q.xts <- dspi_q.xts["1978-01/2022-03"]
 
 Based on the plot of `dspi_q.xts`, the Singapore DSPI has ranged from a minimum of about 80 to a maximum of about 130. This is unlike the CPI chart that we saw earlier that had a clear upward trend.
 
-```{r plot dspi}
+```{r plot dspi, fig.align='center', echo=FALSE}
 plot.xts(dspi_q.xts, main = "Singapore Quarterly DSPI from 1978Q1 to 2022Q1")
 ```
 
 Looking at the boxplot of the `dspi_q.xts` grouped by quarters, we can see some variation across quarters, which may indicate that seasonality is present. Based on the boxplot, the DSPI is generally lower in fourth quarter of each year than in other quarters.
 
-```{r seasonality in dspi}
+```{r seasonality in dspi, fig.align='center', echo=FALSE}
 boxplot(dspi_q.xts ~ cycle(dspi_q.xts),
         ylab = "Quarterly DSPI",
         xlab = "Quarters")
 ```
 
-## 4.3 Composite Leading Index
+### 4.3 Composite Leading Index
 
 The CLI is a leading indicator to predict market expansions and slowdowns. It aggregates the following nine indicators:
 
@@ -256,18 +270,21 @@ The CLI is a leading indicator to predict market expansions and slowdowns. It ag
 
 We could expect that if the CLI indicates a market upturn(downturn), CPI would increase(decrease).
 
-```{r plot cli}
+```{r plot cli, fig.align='center', echo=FALSE}
 plot.xts(cli.xts, main = "Singapore Quarterly CLI from 1978Q1 to 2022Q1")
 ```
 
-## 4.5 Multivariate Analysis
+### 4.5 Multivariate Analysis
 
 Before conducting a multivariate analysis, it would be better to merge our data into a single object. To do this, we need the **`merge`** function. However, as we can see there seems to be a problem, as there are two rows for each quarter in the year. This is because CPI and DSPI considered the quarter to be on March, June, September and December due to the adjustment we did previously.
 
 ```{r merge data}
 data <- merge(cpi_q.xts, dspi_q.xts, cli.xts)
 
-head(data)
+stargazer(head(data, n = 8),
+          type = "text",
+          title = "Unadjusted data",
+          rownames = T)
 ```
 
 To resolve this, we can use the **`na.locf`** function to replace the NAs with the last observation. We can do this on the column, and use the **`na.omit`** function to remove rows with NAs in the CPI and DSPI columns. This would remove the duplication of the quarters in each year.
@@ -277,29 +294,35 @@ data[, 3] <- na.locf(data[, 3])
 
 data <- na.omit(data)
 
-head(data); dim(data)
+stargazer(head(data, n = 8),
+          type = "text",
+          title = "Adjusted data",
+          rownames = T)
+
+dim(data)
 ```
 
 So now we have 177 quarterly observations and 4 variables, which is correct. I have plotted a scatterplot matrix of the variables in `data`. We can see a clear pattern between CPI and CLI, but not so with DSPI. However, this is because we could see a clear upward trend in CPI and CLI when plotted on a chart, but DSPI had a ranging pattern. The correlation matrix plot also shows how the variables are correlated.
 
-```{r scatplot data}
+```{r scatplot data, fig.align='center', echo=FALSE}
 pairs( ~ CPI + DSPI + CLI,
        data = data,
        lower.panel = NULL,
        main = "Scatterplot Matrix of CPI, DSPI and CLI")
-
 ```
 
-```{r corrplot data}
-correl <- cor(x = data, method = "spearman")
+```{r corrplot data, fig.align='center', echo=FALSE}
+correl <- cor(x = data)
 
 corrplot(correl,
          method = "color", 
          type = "lower", 
-         addCoef.col = "black")
+         addCoef.col = "black", 
+         title = "Correlation Matrix of CPI, DSPI and CLI",
+         mar = c(0, 0, 1, 0))
 ```
 
-# 5 Splitting Data Into Training and Testing Sets.
+## 5 Splitting Data Into Training and Testing Sets.
 
 Before we continue with any serious analysis, it would be better to split our data into training and testing sets. The training set will be used to create our models, while the testing set will be used to evaluate our models on out-of-sample prediction. Unlike cross-sectional data, the splitting of the data can only happen at a certain observation and not randomly selected to preserve the stochastic process of the observations.
 
@@ -309,7 +332,7 @@ train <- data["/2019"]
 test <- data["2020/"]
 ```
 
-# 6 Unit Root Test for Stationarity
+## 6 Unit Root Test for Stationarity
 
 Now that we have a better understanding of our variables, we can proceed with the actual time series analysis. However, the first thing to do before modelling is to check that the variables are stationary.
 
@@ -330,7 +353,7 @@ train$CPI %>%
   summary()
 ```
 
-The **`summary`** function returns the full output of the ADF test, but we only need the bottom section where the test statistics and the critical values are. The first test statistic, for `tau2`, is higher than the 5% critical value (-2.042 > -3.43) but we need it to be lower than the critical value to reject the null (ADF is a one-sided test, where the alternative is < 0). Therefore, the CPI series contains unit root. The `phi3` value (third value in the test statistic) has the null hypothesis that there is unit root and no time trend (joint test). The `phi2` value (second value in the test statistic) has the null hypothesis that there is unit root, no drift and no time trend (joint test). We rejected `phi2` based on the 5% critical value, which means that either one, two or all three coefficients are not 0.
+The **`summary`** function returns the full output of the ADF test, but we only need the bottom section where the test statistics and the critical values are. The first test statistic, for `tau3`, is higher than the 5% critical value (-2.042 > -3.43) but we need it to be lower than the critical value to reject the null (ADF is a one-sided test, where the alternative is < 0). Therefore, the CPI series contains unit root. The `phi3` value (third value in the test statistic) has the null hypothesis that there is unit root and no time trend (joint test). The `phi2` value (second value in the test statistic) has the null hypothesis that there is unit root, no drift and no time trend (joint test). We rejected `phi2` based on the 5% critical value, which means that either one, two or all three coefficients are not 0.
 
 ```{r kpss cpi level}
 # Indicate type = "tau" for trend
@@ -389,7 +412,9 @@ diff.train <- diff.data["/2019"]
 diff.test <- diff.data["2020/"]
 ```
 
-```{r plot diff data}
+I plotted the variables after taking the first difference down below. We can see that there are no obvious trends or patterns in the plots after differencing.
+
+```{r plot diff data, fig.align='center', echo=FALSE}
 par(mfrow = c(2, 2))
 for (i in 1:3) {
   print(plot.xts(diff.train[,i], main = names(diff.train[,i])))
@@ -433,29 +458,31 @@ diff.train$dCLI %>%
 
 Since the ADF tau-statistic for all variables are less than the critical tau-value, we can reject the null hypothesis and conclude that the series are I(1) variables (stationary at first difference).
 
-After taking the first difference, we can see that the interaction between variables have changed in the scatterplot matrix and the correlation matrix.
+After taking the first difference, we can see that the interaction between variables have changed in the scatterplot matrix and the correlation matrix. This is why stationarity is an important condition as variables may seem to have a relationship at levels but after taking the difference, there may not be a relationship between variables as seen in the scatter plot below.
 
-```{r scatplot diff train}
+```{r scatplot diff train, fig.align='center', echo=FALSE}
 pairs(~ dCPI + dDSPI + dCLI, 
       data = diff.train,
       lower.panel = NULL,
       main = "Scatterplot Matrix of First Differenced Variables")
 ```
 
-```{r corrplot diff train}
-correldiff <- cor(diff.train, method = "spearman")
+```{r corrplot diff train, fig.align='center', echo=FALSE}
+correldiff <- cor(diff.train)
 
 corrplot(correldiff,
          method = "color",
          type = "lower",
-         addCoef.col = "black")
+         addCoef.col = "black",
+         title = "Correlation Matrix of First Differenced Variables",
+         mar = c(0, 0, 1, 0))
 ```
 
-# 7 Model Selection
+## 7 Model Selection
 
 In this section, I discussed the different possible time series models that can be created from our data.
 
-## 7.1 Autoregressive (Integrated) Moving Average Model
+### 7.1 Autoregressive (Integrated) Moving Average Model
 
 The AR(I)MA model consists of two parts, an autoregressive (AR) model and a moving average (MA) model. Integrated refers to the number of differencing needed to achieve stationary time series.
 
@@ -479,8 +506,8 @@ $$
 
 This can be written simply as ARIMA(p, d, q). In Section 6, I had tested that the CPI series is an I(1) series, which means it is stationary at first difference. Therefore, we have an ARIMA(p, 1, q) model. The p and q lags are determined in various ways. Firstly, it is common to use the autocorrelation and partial autocorrelation function to determine the lag order. The functions **`Acf`** and **`Pacf`** in the **`forecast`** package can plot the ACF and PACF.
 
-```{r acf pacf}
-par(mfrow = c(2,1), mar = c(2, 2, 4, 2))
+```{r acf pacf, fig.align='center'}
+par(mfrow = c(2,1), mar = c(3, 3, 4, 2))
 
 forecast::Acf(x = diff.train$dCPI, main = "ACF of dCPI")
 
@@ -527,7 +554,7 @@ summary(arima2)
 
 We can see that the model automatically selected using the lowest AIC is the different from the one I had manually coded into the **`Arima`** function. The `arima2` model had a lower AIC and had a slightly higher log-likelihood than the `arima1` model. I plotted the actual CPI values and the fitted values based on the two ARIMA models to visualize how well the model fits.
 
-```{r plot arima}
+```{r plot arima, fig.align='center', echo=FALSE}
 # indicated xlim to zoom into the chart to have a better view of the patterns
 plot(ts(diff.train$dCPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
@@ -540,13 +567,13 @@ lines(ts(fitted(arima2), start = c(1978, 2), frequency = 4), col = "gray", type 
 
 abline(h = arima2$coef[4], col = "black", lwd = 2)
 
-legend(x = "topright", legend = c("Actual dCPI", "arima1", "arima2", "Mean from arima2"),
+legend(x = "topleft", legend = c("Actual dCPI", "arima1", "arima2", "Mean from arima2"),
        col = c("darkblue", "red", "gray", "black"), lwd = 1.5)
 ```
 
 It seems that the `arima1` and `arima2` models approximately captures the pattern (with slight differences), although it does not seem to capture the magnitude of the movements in the CPI that well. ARIMA models can give us a benchmark to compare other types of time series models, either through in-sample prediction or out-of-sample forecast.
 
-## 7.2 Autoregressive Distributed Lag Models
+### 7.2 Autoregressive Distributed Lag Models
 
 An ARDL model is similar to an ARMA model, except it used the lags of the dependent variables and lags of other explanatory variables to predict $y_t$. ARDL can be used on time series with combinations of I(0) and I(1).
 
@@ -587,7 +614,7 @@ AIC(ardl)
 
 The log-likelihood is much higher and AIC much lower than the `arima2` model estimated in Section 9.1, which should indicate a better fit.
 
-```{r plot ardl}
+```{r plot ardl, fig.align='center', echo=FALSE}
 plot.zoo(diff.train$dCPI,
          col = "darkblue", type = "l", lwd = 3,
          ylab = "dCPI", xlab = "Time",
@@ -600,18 +627,16 @@ legend(x = "bottomleft", legend = c("Actual dCPI", "ardl"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
-Notice that the x-axis has changed. This is because I used the **`plot.zoo`** function instead of **`plot`** since both `diff.train` and `fitted(ardl)` are technically `zoo` objects. The fitted values of `arima1` and `arima2` are `ts` objects and coercing them to `zoo` objects require more steps, which is not the purpose of this project.
-
 We can see a significant improvement in the fit of the `ardl1` model as compared to the `arima2` model in Section 9.1.
 
-## 7.3 Vector Autoregressive Model
+### 7.3 Vector Autoregressive Model
 
 A VAR model allows us to model the influence of two or more time series on one another, meaning that these variables are endogenous. In VAR models, the variables (e.g. $x$ and $y$) are simultaneously determined by the lags of these variables. A VAR(p) model of two variables can be written as:
 
 $$ 
-y_t = beta_{10} + beta_{11} y_{t-1} + dotsc + beta_{1p} y_{t-p} + gamma_{11} x_{t-1} + \dotsc + gamma_{1p} x_{t-p} + u_{1t} \\
+y_t = beta_{10} + beta_{11} y_{t-1} + \dotsc + beta_{1p} y_{t-p} + gamma_{11} x_{t-1} + \dotsc + gamma_{1p} x_{t-p} + u_{1t} \\
 
-x_t = beta_{20} + beta_{21} y_{t-1} + dotsc + beta_{2p} y_{t-p} + gamma_{21} x_{t-1} + \dotsc + gamma_{2p} x_{t-p} + u_{2t} 
+x_t = beta_{20} + beta_{21} y_{t-1} + \dotsc + beta_{2p} y_{t-p} + gamma_{21} x_{t-1} + \dotsc + gamma_{2p} x_{t-p} + u_{2t} 
 $$
 
 We can see that with more lags and more variables included into the VAR system, there would be more unknown parameters and lesser degrees of freedom, which can affect estimation and statistical tests. However, if too few lags were included, we may encounter the problem of autocorrelated errors.
@@ -641,9 +666,21 @@ stargazer(var$varresult,
           dep.var.labels.include = F)
 ```
 
-The output shows the three equations, one for each variable, with 2 lags of each variable. Therefore, the model gets really big as more variables and lags are added, which can become a problem.
+The output shows the three equations, one for each variable, with 2 lags of each variable. Therefore, the model gets really big as more variables and lags are added, which can become a problem. We can write it down as:
 
-```{r plot var dcpi}
+$$
+\begin{aligned}
+
+\Delta CPI_t &= 0.120 + 0.268\Delta CPI_{t-1} + 0.261\Delta CPI_{t-2} + 0.041\Delta DSPI_{t-1} - 0.004\Delta DSPI_{t-2} + 0.039\Delta CLI_{t-1} + 0.032\Delta CLI_{t-2} \\
+
+\Delta DSPI_t &= -0.103 + 0.342\Delta DSPI_{t-1} - 0.276\Delta DSPI_{t-2} - 0.393\Delta CPI_{t-1} + 0.385\Delta CPI_{t-2} - 0.079\Delta CLI_{t-1} + 0.358\Delta CLI_{t-2} \\
+
+\Delta CLI_t &= 0.484 + 0.346\Delta CLI_{t-1} - 0.061\Delta CLI_{t-2} - 0.039\Delta DSPI_{t-1} - 0.086\Delta DSPI_{t-2} - 0.051\Delta CPI_{t-1} - 0.381\Delta CPI_{t-2}
+
+\end{aligned}
+$$
+
+```{r plot var dcpi, fig.align='center', echo=FALSE}
 plot(ts(diff.train$dCPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "dCPI", xlab = "Time",
@@ -658,7 +695,7 @@ legend(x = "bottomleft", legend = c("Actual dCPI", "var"),
 
 An advantage of models like VAR is that we can also plot the predicted values of other variables that are in the model.
 
-```{r plot var ddspi}
+```{r plot var ddspi, fig.align='center', echo=FALSE}
 plot(ts(diff.train$dDSPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "dDSPI", xlab = "Time",
@@ -670,7 +707,7 @@ legend(x = "bottomleft", legend = c("Actual dDSPI", "var"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
-```{r plot var dcli}
+```{r plot var dcli, fig.align='center', echo=FALSE}
 plot(ts(diff.train$dCLI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "dCLI", xlab = "Time",
@@ -682,7 +719,7 @@ legend(x = "bottomleft", legend = c("Actual dCLI", "var"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
-# 8 Granger Causality Test
+## 8 Granger Causality Test
 
 Using the Granger Causality Test, we can statistically determine if a series can be used predict values of another series better than solely using its past values. Despite the name, it should not be used to determine true cause-and-effect relationships between variables. It can be a useful test to determine if variables should be added to a time series model to improve forecasting accuracy.
 
@@ -703,7 +740,7 @@ granger_causality(varmodel = var)
 
 The output provides both F-test and Likelihood Ratio Test values. Given the significance level of 5%, `dDSPI` and `dCLI` granger-cause `dCPI` and `dDSPI` granger-causes `dCLI`. None of the variables granger-cause `dDSPI` and we did not find any bi-directional causality. It may be that the wrong number of lags was chosen or simply that lags of other variables does not help in predicting other variables. In such cases, the forecasting power of this model may be affected since these variables are inter-dependent on one another.
 
-# 9 Johansen Test for Cointegration
+## 9 Johansen Test for Cointegration
 
 Since we have I(1) variables, we can model the variables at levels if they are found to have a cointegrating relationship. When variables are cointegrated, they appear to have the same long-run patterns and the difference between these two variables are stationary. In such cases, we could estimate a Error Correction Model (ECM) or a Vector Error Correction Model (VECM), which allows us to model long-run relationships between variables. If these I(1) variables are not cointegrated, we can only estimate a short-run model using the VAR or ARDL models.
 
@@ -722,12 +759,13 @@ To be constant throughout the project, I would use the AIC to select the number 
 # Indicate type = "trace" for trace test, "eigen" for eigenvalue test
 
 # Indicate ecdet = "none" assuming no intercept in the cointegration process, indicate "const" or "trend" to add constant or trend into the equation
+# It is common to indicate no deterministic terms in the error correction term unless there are reasons to believe otherwise
 
 # K is the number of lags from the lag selection using VARselect
 
 jotest <- urca::ca.jo(x = train, 
                       type = "trace", 
-                      ecdet = "const", 
+                      ecdet = "none", 
                       K = 3)
 
 summary(jotest)
@@ -737,17 +775,16 @@ The test results are read starting from:
 
 1.  r = 0: value under test column is more than value under 5pct column (statistically significant) and we have at least one cointegrating relationship.
 
-2.  r <= 1: value under test column is more than value under 5pct column (statistically significant) and we have at least one cointegrating relationship.
-
-3.  r <= 2: value under test column is less than value under 5pct column (statistically insignificant) and we have at most two cointegrating relationship.
+2.  r <= 1: value under test column is less than value under 5pct column (statistically insignificant) and we have at most one cointegrating relationship.
 
 Since we have found evidence of cointegration through the Johansen Test, we can estimate a ECM or VECM model.
 
-## 9.1 Error Correction Model
+### 9.1 Error Correction Model
 
 Given the cointegration between variables, we can model the long-run equilibrium variable $y^*$ using the equilibrium of $x^*$ at levels. To model the short-run model, we need to remember that the variables are I(1), so we need to use a first-differenced equation, for example $\Delta y_t = \gamma_0 + \gamma_1 \Delta x_t + \epsilon_t$. But since there is a long-run association between $y$ and $x$, we could include some components into the short-run model so that it takes into account this long-run association. What we can add into the short-run model is the error correction term (ECT), which is the one-period ago residual from the long-run model. The following are the steps to modelling an ECM:
 
 1. Regress $y^*$ on $x^*$ (and their lags) and obtain the residuals $v_t$
+
 2. Regress $\Delta y_t$ on $\Delta x_t$ and the lag of the residual in Step 1, $v_{t-1}$
 
 If there is indeed cointegration, the coefficient of $v_{t-1}$ should be between -1 and 0. This is because, taking the long-run pattern into account, if $y_{t-1}$ was above/below $y^*$, then we should expect $y_t$ to decrease/increase, showing an adjustment to the equilibrium. 
@@ -766,7 +803,7 @@ ardl_lr <- ardl_lr_lag$best_model
 summary(ardl_lr)
 ```
 
-Instead of extracting the residuals, we can use the **`uecm`** and **`recm`** functions to get the unrestricted and restricted form of the ECM. The first model will show all the coefficients for the long-run and short-run variables, while the second will only show the short-run variables with the ECT.
+Instead of extracting the residuals, we can use the **`uecm`** and **`recm`** functions to get the unrestricted and restricted form of the ECM. The first model will show all the coefficients with the long-run and short-run variables, while the second will only show the short-run variables with the ECT.
 
 ```{r uecm}
 un_ecm <- ARDL::uecm(ardl_lr)
@@ -788,7 +825,10 @@ We can see that the `r_ecm` output is the same as the `un_ecm` output, less the 
 To obtain the long-run multiplier, we can use the **`multiplier`** function.
 
 ```{r lr multiplier}
-multipliers(un_ecm) # Can also be used on ardl_lr
+stargazer(multipliers(un_ecm), # Can also be used on ardl_lr
+          type = "text", 
+          title = "Long Run Multipliers of var Model",
+          summary = F)
 ```
 
 The equation of the error correction model is:
@@ -803,7 +843,7 @@ $$
 \end{aligned}
 $$
 
-```{r plot ardl ecm}
+```{r plot ardl ecm, fig.align='center', echo=FALSE}
 plot.zoo(diff.train$dCPI, col = "darkblue", type = "l", lwd = 3,
          ylab = "dCPI", xlab = "Time",
          main = "Actual vs Fitted CPI at First Difference Using ARDL-ECM")
@@ -814,19 +854,19 @@ legend(x = "bottomleft", legend = c("Actual dCPI", "ardl-ecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
-## 9.2 Vector Error Correction Model
+### 9.2 Vector Error Correction Model
 
 The VECM is simply a VAR model with error correction terms. What has been explained in Section 7.3 Vector Autoregressive Models and Section 9.1 Error Correction Model should be sufficient to give a glimpse of what a VECM is about. 
 
 We can build a VECM using the **`urca`** package, using the functions **`ca.jo`**, **`cajools`** and **`cajorls`**. Although we had seen earlier in the Johansen Test that we used **`ca.jo`** to test the number of cointegrating relationships, it can also provide the VECM using the other functions mentioned.
 
-```{r}
+```{r vecm}
 # K = 3 was determined in Section 9 in the Johansen Test
 # Add in spec = "transitory" to obtain the VECM formula
 
 get_vecm <- ca.jo(x = train, 
                   type = "trace", 
-                  ecdet = "const", 
+                  ecdet = "none", 
                   K = 3,
                   spec = "transitory")
 
@@ -834,10 +874,18 @@ get_vecm <- ca.jo(x = train,
 # Get estimated VAR parameters
 # r represents number of cointegrations
 
-vec_ecm <- cajorls(get_vecm, r = 2)
+vec_ecm <- cajorls(get_vecm, r = 1)
 
-kable(tidy(vec_ecm$rlm), format = "pipe",
-      caption = "Estimates of 3-Equation Vector Error Correction Model",
+kable(tidy(summary(vec_ecm$rlm)[[1]]), format = "pipe",
+      caption = "VECM Estimation Output for dCPI",
+      digits = 4)
+
+kable(tidy(summary(vec_ecm$rlm)[[2]]), format = "pipe",
+      caption = "VECM Estimation Output for dDSPI",
+      digits = 4)
+
+kable(tidy(summary(vec_ecm$rlm)[[3]]), format = "pipe",
+      caption = "VECM Estimation Output for dCLI",
       digits = 4)
 ```
 
@@ -845,22 +893,23 @@ The output shows the coefficients under the `estimate` column of each variable u
 
 $$
 \begin{aligned}
-\Delta CPI_t &= 0.189\Delta CPI_{t-1} + 0.165\Delta CPI_{t-2} + 0.032 \Delta DSPI_{t-1} -0.007\Delta DSPI_{t-2} \\
-&~~~~
-+0.021\Delta CLI_{t-1} + 0.015\Delta CLI_{t-2} -0.038ECT_{1, t-1} + 0.009ECT_{2,t-1} \\
 
-\Delta DSPI_t &= -0.050\Delta CPI_{t-1} + 0.611\Delta CPI_{t-2} + 0.267\Delta DSPI_{t-1} -0.325\Delta DSPI_{t-2} \\
+\Delta CPI_t &= 0.1526 + 0.2691\Delta CPI_{t-1} + 0.2616\Delta CPI_{t-2} + 0.0406 \Delta DSPI_{t-1} -0.003\Delta DSPI_{t-2} \\
 &~~~~
--0.125\Delta CLI_{t-1} + 0.208\Delta CLI_{t-2} -0.329ECT_{1, t-1} -0.032ECT_{2,t-1} \\
++ 0.0391\Delta CLI_{t-1} + 0.0314\Delta CLI_{t-2} - 0.0005 ECT_{t-1} \\
 
-\Delta CLI_t &= -0.018\Delta CPI_{t-1} -0.358\Delta CPI_{t-2} -0.053\Delta DSPI_{t-1} -0.103\Delta DSPI_{t-2} \\
+\Delta DSPI_t &= 15.5003 + 0.1272\Delta CPI_{t-1} + 0.8377\Delta CPI_{t-2} + 0.3030\Delta DSPI_{t-1} -0.2986\Delta DSPI_{t-2} \\
 &~~~~
-+0.366\Delta CLI_{t-1} -0.047\Delta CLI_{t-2} -0.021ECT_{1, t-1} + 0.016ECT_{2,t-1}
+-0.1062\Delta CLI_{t-1} + 0.2283\Delta CLI_{t-2} -0.2222 ECT_{t-1} \\
+
+\Delta CLI_t &= 1.1357 -0.0291\Delta CPI_{t-1} -0.3617\Delta CPI_{t-2} -0.0405\Delta DSPI_{t-1} -0.0865\Delta DSPI_{t-2} \\
+&~~~~
++0.3452\Delta CLI_{t-1} -0.0660\Delta CLI_{t-2} -0.0093 ECT_{t-1}
 
 \end{aligned}
 $$
 
-```{r plot vecm cpi}
+```{r plot vecm cpi, fig.align='center', echo=FALSE}
 plot(ts(diff.train$dCPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "dCPI", xlab = "Time",
@@ -873,7 +922,7 @@ legend(x = "bottomleft", legend = c("Actual dCPI", "vecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
-```{r plot vecm dspi}
+```{r plot vecm dspi, fig.align='center', echo=FALSE}
 plot(ts(diff.train$dDSPI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "dDSPI", xlab = "Time",
@@ -886,7 +935,7 @@ legend(x = "bottomleft", legend = c("Actual dDSPI", "vecm"),
        col = c("darkblue", "red"), lwd = 1.5)
 ```
 
-```{r plot vecm cli}
+```{r plot vecm cli, fig.align='center', echo=FALSE}
 plot(ts(diff.train$dCLI, start = c(1978, 2), frequency = 4),
      col = "darkblue", type = "l", lwd = 3,
      ylab = "dCLI", xlab = "Time",
@@ -904,16 +953,16 @@ We can also convert the VECM in differences to a VAR in levels using the **`vec2
 ```{r vec2var}
 var_ecm <- vec2var(get_vecm, r = 2)
 
-(var_ecm)
+var_ecm
 ```
 
-# 10 Post-Estimation Tests
+## 10 Post-Estimation Tests
 
 Two common problems encountered in time series analysis are serial correlation of errors and heteroskedastic errors. These can affect our analysis as estimators are no longer efficient and the usual test statistics become unreliable, which can be important if inference is the main purpose. The Breusch-Godfrey Test can be used to test for serial correlation, while the Breusch-Pagan Test can be used to test for heteroskedasticity. However, there is no single package that could accommodate different models for these tests, so we will have to use different functions from different packages for the models that are accepted.
 
 However, using Newey-West standard errors to obtain the corrected test statistics regardless of whether serial correlation and/or heteroskedasticity is present seems to be an acceptable method, especially when we have large sample sizes.
 
-## 10.1 ARDL Model
+### 10.1 ARDL Model
 
 We can use the **`bgtest`** and **`bptest`** from the **`lmtest`** package.
 
@@ -929,7 +978,7 @@ lmtest::bptest(ardl, studentize = T)
 
 There is serial correlation and heteroskedasticity in the ARDL residuals, and we should use the Newey-West (Heteroskedasticity and Autocorrelation Corrected) standard errors to obtain the correct test statistics for inference.
 
-## 10.2 VAR Model
+### 10.2 VAR Model
 
 The functions that can be applied to VAR models are **`serial.test`** and the **`arch.test`** from the **`vars`** package. The **`arch.test`** performs the ARCH test to detect if there is changing conditional variance in a time series, unlike the Breusch-Pagan test that detects for constant variance.
 
@@ -943,7 +992,7 @@ vars::arch.test(var, lags.single = 4, lags.multi = 4, multivariate.only = F)
 
 From the tests, there are was no serial correlation detected at up to 4 lags of the error term, and only `dCPI` and the overall VAR models has ARCH effects. 
 
-## 10.3 VECM
+### 10.3 VECM
 
 ```{r bg vecm}
 vars::serial.test(var_ecm, lags.bg = 4, type = "BG")
@@ -955,7 +1004,7 @@ vars::arch.test(var_ecm, lags.single = 4, lags.multi = 4, multivariate.only = F)
 
 Similar to the tests for the VAR model, there is no serial correlation detected at up to 4 lags of the error terms and only the `CPI` single equation and the multivariate model has ARCH effects. 
 
-# 11 Forecasting and Evaluation
+## 11 Forecasting and Evaluation
 
 For the forecast and evaluation, I would compare the data at first difference in the `diff.test` dataset against the 8 period ahead forecasted values. This would mean that the forecasted values are for the periods 2020 Q1 to 2021 Q4. I then plotted the actual vs forecasted values at levels to see how well the different models fit. However, there are two points to keep in mind. 
 
@@ -965,7 +1014,7 @@ Secondly, models such as ARIMA and VAR uses endogenous variable but ARDL models 
 
 For the ARIMA models, we can generate forecast values using the **`forecast`** function in the **`forecast`** package. For ARDL, we would need to use the **`dLagM`** package and for ARCL-ECM we need to use the **`ecm`** package as they have their own forecast functions. For VAR and VECM models, we need to use the **`predict`** function from the base R package. 
 
-## 11.1 Forecast Performance of ARIMA Models
+### 11.1 Forecast Performance of ARIMA Models
 
 ```{r arima1 h8}
 arima1_h8 <- forecast(object = arima1, h = 8, level = 95)
@@ -984,7 +1033,7 @@ R simply refers to the row number of the observations and does not correct the d
 
 The accuracy measures Root Mean Squared Error (RMSE), Mean Absolute Error (MAE) and Mean Absolute Scaled Error (MASE) can be compared across models and lower values would indicate better out-of-sample forecast. The Mean Absolute Percentage Error (MAPE) can also be used, but may not be useful in cases where we might have zeroes in data. For the out-of-sample forecast, we are interested in the accuracy measures of the `Test set` row.
 
-```{r plot f_arima1}
+```{r plot f_arima1, fig.align='center', echo=FALSE}
 fcpi_arima1 <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(arima1_h8$mean),
                      fcpi_lower = as.vector(last(train$CPI)) + cumsum(arima1_h8$lower),
                      fcpi_upper = as.vector(last(train$CPI)) + cumsum(arima1_h8$upper)),
@@ -1018,7 +1067,7 @@ stargazer(accuracy(object = arima2_h8, x = diff.test["2020/2021"]$dCPI),
           title = "Accuracy Measures of arima2 Model for 8-Steps Ahead Forecasting")
 ```
 
-```{r plot f_arima2, echo=FALSE}
+```{r plot f_arima2, fig.align='center', echo=FALSE}
 fcpi_arima2 <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(arima2_h8$mean),
                      fcpi_lower = as.vector(last(train$CPI)) + cumsum(arima2_h8$lower),
                      fcpi_upper = as.vector(last(train$CPI)) + cumsum(arima2_h8$upper)),
@@ -1039,7 +1088,7 @@ legend(x = "topleft",
 
 There seemed to be negligible differences between the models `arima1` and `arima2`, so it might be better to go with the simpler `arima2` when using ARIMA models for forecasting Singapore CPI.
 
-## 11.2 Forecast Performance of ARDL and ARDL-EC Models
+### 11.2 Forecast Performance of ARDL and ARDL-EC Models
 
 To forecast the ARDL and ARDL-EC models, we need values for the exogenous variables. However, as there are lags in the model as well, **`forecast`** and **`predict`** functions do not work well with the underlying **`dynlm`** objects of these models. To resolve this, we have to use the **`dLagM`** package function **`ardlDlm`** to fit the ARDL model. The **`dLagM`** package also contains its own **`forecast`** function.
 
@@ -1079,7 +1128,7 @@ stargazer(accuracy(object = ardl_h8adj, x = diff.test["2020/2021"]$dCPI),
           title = "Accuracy Measures of ardl Model for 8-Steps Ahead Forecasting")
 ```
 
-```{r plot f_ardl}
+```{r plot f_ardl, fig.align='center', echo=FALSE}
 fcpi_ardl <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(ardl_h8adj$mean),
                       fcpi_lower = as.vector(last(train$CPI)) + cumsum(ardl_h8adj$lower),
                       fcpi_upper = as.vector(last(train$CPI)) + cumsum(ardl_h8adj$upper)),
@@ -1141,7 +1190,7 @@ stargazer(accuracy(object = ecm_h8adj, x = diff.test["2020/2021"]$dCPI),
           title = "Accuracy Measures of ecm Model for 8-Steps Ahead Forecasting")
 ```
 
-```{r plot ecm}
+```{r plot ecm, fig.align='center', echo=FALSE}
 fcpi_ecm <- ts(cbind(fcpi = ecm_h8$forecasts$Forecast,
                      fcpi_lower = ecm_h8$forecasts$`95% LB`,
                      fcpi_upper = ecm_h8$forecasts$`95% UB`),
@@ -1160,7 +1209,7 @@ legend(x = "topleft",
        lwd = 1.5)
 ```
 
-## 11.3 Forecast Performance of VAR and VEC Models
+### 11.3 Forecast Performance of VAR and VEC Models
 
 Forecasting VAR and VEC models is much simpler that for ARDL and ARDL-EC models in R. It simply requires the **`predict`** function in base R. However, we still need to create a list object of class `forecast` that works with the **`accuracy`** function.
 
@@ -1203,20 +1252,110 @@ stargazer(accuracy(object = var_acc_list$dCLI_acc, x = diff.test["2020/2021"]$dC
           title = "Accuracy Measures of var Model for 8-Steps Ahead Forecasting for dCLI")
 ```
 
-```{r plot f_var}
-fcpi_arima2 <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(arima2_h8$mean),
-                     fcpi_lower = as.vector(last(train$CPI)) + cumsum(arima2_h8$lower),
-                     fcpi_upper = as.vector(last(train$CPI)) + cumsum(arima2_h8$upper)),
-                  start = c(2020, 1),
-                  frequency = 4)
+```{r plot f_var, fig.align='center', echo=FALSE}
+fcpi_var <- ts(cbind(fcpi = as.vector(last(train$CPI)) + cumsum(var_h8$fcst[["dCPI"]][,"fcst"]),
+                     fcpi_lower = as.vector(last(train$CPI)) + cumsum(var_h8$fcst[["dCPI"]][,"lower"]),
+                     fcpi_upper = as.vector(last(train$CPI)) + cumsum(var_h8$fcst[["dCPI"]][,"upper"])),
+               start = c(2020, 1),
+               frequency = 4)
+
+plot.zoo(cbind(as.zoo(fcpi_var), test$CPI["2020/2021",], train$CPI["2016/2019"]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 3,
+         ylab = "CPI", xlab = "Year/Quarter",
+         main = "Actual and Forecasted CPI Using Model var")
+
+legend(x = "topleft", 
+       legend = c("Forecasted CPI", "Lower and Upper Bound", "Actual CPI 1Q20 to 4Q21", "Actual CPI 1Q16 to 4Q19"), 
+       col = c("red", "gray", "blue", "black"), 
+       lwd = 1.5)
 ```
 
+For the VECM, R does not have a function that allows us to forecast the VECM in differences. We have to use the VAR in levels that was converted from the model `vec_ecm` using the **`vec2var`** function.
 
+```{r var ecm h8}
+vecm_h8 <- predict(var_ecm, n.ahead = 8, ci = 0.95)
 
-# References
+stargazer(vecm_h8$fcst, 
+          type = "text", 
+          title = c("Forecasted dCPI from 1Q20 to 4Q21", "Forecasted dDSPI from 1Q20 to 4Q21", "Forecasted dCLI from 1Q20 to 4Q21"))
 
+# Just as in the ARDL-ECM case, the forecasted values are in levels and we cannot directly compare to the other models.
+# Need to take the difference of the forecasted values
 
+dforecast_vecm <- list()
 
+for (i in 1:3) {
+  dforecast <- data.frame(fcst = na.omit(diff(append(vecm_h8$fcst[[i]][,"fcst"], as.vector(last(train$CPI)), 0))),
+                          lowerb = na.omit(diff(append(vecm_h8$fcst[[i]][,"lower"], as.vector(last(train$CPI)), 0))),
+                          upperb = na.omit(diff(append(vecm_h8$fcst[[i]][,"upper"], as.vector(last(train$CPI)), 0))))
+  
+  name <- paste("diff_", names(vecm_h8$fcst[i]), sep = "")
+  
+  dforecast_vecm[[name]] <- dforecast
+}
 
+# Create "forecast" structure to be used with the accuracy function
 
+vecm_acc_list <- list()
 
+for (i in 1:3) {
+  fc <- structure(list(level = 95,
+                       mean = dforecast_vecm[[i]][,"fcst"],
+                       lower = dforecast_vecm[[i]][,"lowerb"],
+                       upper = dforecast_vecm[[i]][,"upperb"],
+                       x = diff.train[,i],
+                       fitted = c(rep(NA, 2), fitted(vec_ecm[["rlm"]])[,i]),
+                       residuals = c(rep(NA, 2), resid(vec_ecm[["rlm"]])[,i])),
+                  class = "forecast")
+  
+  name <- paste(names(dforecast_vecm[i]), "_acc", sep = "") 
+  
+  vecm_acc_list[[name]] <- fc
+}
+
+stargazer(accuracy(object = vecm_acc_list$diff_CPI_acc, x = diff.test["2020/2021"]$dCPI), 
+          type = "text", 
+          title = "Accuracy Measures of vecm Model for 8-Steps Ahead Forecasting for dCPI")
+
+stargazer(accuracy(object = vecm_acc_list$diff_DSPI_acc, x = diff.test["2020/2021"]$dDSPI), 
+          type = "text", 
+          title = "Accuracy Measures of vecm Model for 8-Steps Ahead Forecasting for dDSPI")
+
+stargazer(accuracy(object = vecm_acc_list$diff_CLI_acc, x = diff.test["2020/2021"]$dCLI), 
+          type = "text", 
+          title = "Accuracy Measures of vecm Model for 8-Steps Ahead Forecasting for dCLI")
+```
+
+```{r plot f_vecm, fig.align='center', echo=FALSE}
+fcpi_vecm <- ts(cbind(fcpi = vecm_h8$fcst[["CPI"]][,"fcst"],
+                      fcpi_lower = vecm_h8$fcst[["CPI"]][,"lower"],
+                      fcpi_upper = vecm_h8$fcst[["CPI"]][,"upper"]),
+                start = c(2020, 1),
+                frequency = 4)
+
+plot.zoo(cbind(as.zoo(fcpi_vecm), test$CPI["2020/2021",], train$CPI["2016/2019"]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 3,
+         ylab = "CPI", xlab = "Year/Quarter",
+         main = "Actual and Forecasted CPI Using Model vecm")
+
+legend(x = "topleft", 
+       legend = c("Forecasted CPI", "Lower and Upper Bound", "Actual CPI 1Q20 to 4Q21", "Actual CPI 1Q16 to 4Q19"), 
+       col = c("red", "gray", "blue", "black"), 
+       lwd = 1.5)
+```
+
+## 12 Conclusion
+
+In this project, I have detailed the 5 common time series models used in forecasting that I have learnt. Through this project, we can experience how using R for time series analysis feels like. It is not as simple as using EViews or Stata as the packages have their own quirks and functions can be repeated across packages but only serve models that are built by those packages.
+
+The ARIMA models gives us a quick and easy forecasting method as we are just using the lags of CPI and its residuals, without the need of exogenous variables. However, whether in-sample or out-of-sample prediction, these models do not capture much of the magnitude of the movements in CPI although they are able to capture its patterns.
+
+The ARDL model was able to use exogenous variables to provide a better fit to the data, both in-sample and out-of-sample. However, for out-of-sample prediction, I had used actual data of the exogenous variables, which cannot happen for real-world forecasting methods. The correct method would be to use another model to forecast the exogenous variables and use these forecasted values fit the out-of-sample prediction. This means that the accuracy of the forecast depends on both the CPI model and the models of other variables.
+
+The VAR model can be used when all variables are endogenous and can be used to explain one another. By using VAR models, we solved the problem of ARDL models by allowing variables to be forecasted at the same time. However, despite the good in-sample fit, the out-of-sample fit is disappointing. This is likely due to the findings of the Granger Causality Test, where DSPI and CLI can be used to improve the prediction of CPI but other variables have lack of granger causality. This would be a model misspecification and would lead to poor forecasting results.
+
+The Johansen Test was used to determine if cointegration exists between the variables and we found that there is a cointegrating relationship. This was the reason for using the ECM and VECM. The ECM had much better out-of-sample forecasts than the VECM, although this could be attributed to using actual data for the exogenous variables. However, we can see that the VECM was unable to capture the rising trend of the CPI in levels through the forecast, which again could be due to model misspecification as in the VAR model case.
+
+For the case of forecasting Singapore CPI, ARIMA models seem to have the best forecasting ability among the models given its simplicity. It would be interesting to find out if using ARDL with forecasted exogenous variables could still provide a better forecast accuracy than the ARIMA models in the future. As for the VAR and VECM models, there would be a need to re-specify the models or simply fit the models individually just as in the ARDL case. I had also ignored the effects of seasonality in this project, which I would discuss separately in the future as well.
