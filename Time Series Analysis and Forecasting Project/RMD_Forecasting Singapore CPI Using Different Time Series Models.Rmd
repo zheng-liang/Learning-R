@@ -7,6 +7,10 @@ output:
     code_folding: hide
 ---
 
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
 ## 1 Introduction
 
 The purpose of this project is to introduce time series modelling and forecasting in R using a practical example. It covers the common tests that are done in time series analysis, such as unit root tests for stationarity, Breusch-Godfrey test for serial correlation, and Granger Causality test for determining whether variables are useful in forecasting other variables. The main models used in this project are the ARIMA, ARDL and VAR models, which will be discussed in detail in the later sections. However, I would not be tackling the issue of seasonality in this project as it will become a lengthy discussion. Instead, I would do this in a future project as I get more familiar with the treatment of seasonal effects on time series and compare the results against the ones I have documented here.
