@@ -10,11 +10,10 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 ```
 
-# 1 Introduction
+## 1 Introduction
 
 The purpose of this project was to apply what I had learnt about logistic regression and classification in machine learning (ML). It documents (1) the packages and functions that are useful for logistic classification and ML, and (2) the steps to building a logistic classification model in R.
 
@@ -22,7 +21,7 @@ The project has three main parts. In the first part, I introduced what logistic 
 
 This project focused on how to use logistic regression models in binary classification, and less about the mathematical application and theory behind it as these can be found on various websites and textbooks.
 
-## 1.1 What is logistic regression and why is it used in classification problems?
+### 1.1 What is logistic regression and why is it used in classification problems?
 
 Logistic regression is commonly used to determine the relationship between binary outcomes and one or more independent variables. The logistic regression model is written as
 
@@ -35,47 +34,47 @@ The coefficients of the independent variables can be interpreted as the effect o
 
 Logistic regression can be simple to understand and interpret, although it may not be the best classification model in comparison to more sophisticated ML algorithms.
 
-## 1.2 What are the assumptions needed for logistic regression?
+### 1.2 What are the assumptions needed for logistic regression?
 
 This sub-section lists the common assumptions of logistic regressions and some of the ways to check them.
 
-### 1.2(a) Type of logistic regression matches the response variable
+#### 1.2(a) Type of logistic regression matches the response variable
 
 The type of logit regression needs to match the type of outcome. In most cases, logit regression is used for binary outcomes but there are cases where it might be used for multinomial or ordinal outcomes and appropriate models need to be used for each type.
 
 **To check assumption**: Check the number of unique outcomes/response variable. If there are only two outcomes, it is very likely to be a binary classification problem. If there are more than two outcomes, we are dealing with multinomial or ordinal classification problems.
 
-### 1.2(b) Observations are independent
+#### 1.2(b) Observations are independent
 
 Observations need to be independent of one another, and not be affected by other observations.
 
 **To check assumption**: Plot the residuals against order of observations and check if there is a random pattern. If pattern is not random, it indicates possibility of correlation between observations. However, autocorrelation should be less of a concern with cross-sectional data as long as the design of the study ensures that data are collected from random samples and there are no repeated or paired observations.
 
-### 1.2(c) No multicollinearity among explanatory variables
+#### 1.2(c) No multicollinearity among explanatory variables
 
 Independent variables should not be highly correlated with one another as it affects the variance of estimated coefficients and statistical significance of estimated coefficients becomes unreliable.
 
 **To check assumption**: A simple method would be to use a correlation matrix to find highly correlated explanatory variables. Another method is to calculate the variance inflation factor (VIF) of each explanatory variable. A common rule of thumb is that VIF more than 10 indicates problem of multicollinearity.
 
-### 1.2(d) Linear relationship between continuous explanatory variables and logit of response variable
+#### 1.2(d) Linear relationship between continuous explanatory variables and logit of response variable
 
 Continuous explanatory variables and the logit of the response variable (or log-odds) have a linear relationship. Logit regression does not require linearity between continuous explanatory variables and response variable.
 
 **To check assumption**: Plot log-odds against each continuous explanatory variable and check for linear relationship
 
-### 1.2(e) No highly influential outliers
+#### 1.2(e) No highly influential outliers
 
 There should be no influential outliers that could affect the outcome of the model. Removing such observations are possible if they are determined to be incorrectly entered or measured. It is also possible to compare the regression results with and without the outliers, and note how the results differ.
 
 **To check assumption**: Calculate Cook's Distance to find influential observations and standardized residuals to find outliers.
 
-### 1.2(f) Large sample size
+#### 1.2(f) Large sample size
 
 A large sample size is needed to produce conclusive results.
 
-# 2 Packages Required
+## 2 Packages Required
 
-```{r load packages, message=FALSE}
+```{r load packages, message=FALSE, class.source = "fold-show"}
 # Use install.packages("packagename") if the packages are not installed in R
 library(car) 
 library(caret) # For building ML models
@@ -83,18 +82,19 @@ library(corrplot) # For correlation plot
 library(tidyverse) # For ggplot and dplyr packages
 library(mlbench) # For data sets
 library(lmtest) # For statistical tests
-library(glmnet) # For LASSO logistic regression
+library(ROCR) # For determining cutoff-probability using ROC
+library(stargazer) # For neat tables and outputs, where possibles
 ```
 
 These packages provide the necessary functions and data sets that can be used for learning and building logistic classification models.
 
-# 3 Basics of Logistic Regression
+## 3 Basics of Logistic Regression
 
 This section covers how to perform logistic regression and solve binary classification problems using an in-built dataset.
 
 I selected the Pima Indians Diabetes Database in the **`mlbench`** package for this example. The purpose is to determine the probability of a person having diabetes based on several variables such as the person's body mass index, age, and blood pressure.
 
-## 3.1 Exploratory Data Analysis
+### 3.1 Exploratory Data Analysis
 
 Let us first load the data and perform an Exploratory Data Analysis before the modelling task.
 
@@ -109,9 +109,10 @@ summary(PimaIndiansDiabetes)
 ```
 
 ```{r head and tail of df}
-head(PimaIndiansDiabetes, n = 4)
-
-tail(PimaIndiansDiabetes, n = 4)
+stargazer::stargazer(rbind(head(PimaIndiansDiabetes), tail(PimaIndiansDiabetes)), 
+                     type = "text", 
+                     title = "First and Last 6 Observations in PimaIndiansDiabetes Dataset",
+                     summary = F)
 ```
 
 By entering `??PimaIndiansDiabetes` into the console, we can get a description of the variables in the data frame. I have listed the variables and its description in the table below.
@@ -162,7 +163,7 @@ ggplot(data = response) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-We have about twice as many negative observations compared to positive observations. While this may not be a problem in our case, it would be good to think about the representation of observations in a more complex dataset. Under-representation of any group in an analysis may lead to unreliable results and analysis.
+We have about twice as many negative observations compared to positive observations. While this may not be a problem in our case, it would be good to think about the representation of observations in a more complex dataset. Under-representation of any group in an analysis may lead to unreliable results and prediction.
 
 ```{r boxplot of dependent variables, fig.width=6, fig.height=4.5, fig.align='center'}
 par(mfrow = c(1, 4), mar = c(1, 3, 2, 1))
@@ -221,7 +222,7 @@ From the correlation matrix, there does not seem to be any highly correlated exp
 
 Now that we have a better understanding of the variables in the dataset, we can proceed with the modelling process.
 
-## 3.2 Building the Binary Logistic Regression Model
+### 3.2 Building the Binary Logistic Regression Model
 
 To start off, we can create a logistic regression model that uses all the explanatory variables. We need to use the **`glm`** function and for the **`family`** argument, we indicate `binomial(link = "logit")` for logistic regression.
 
@@ -231,7 +232,9 @@ model1 <- glm(diabetes == "pos" ~ ., #indicate "pos" so that it is 1 and "neg" i
               data = data, 
               family = binomial(link = "logit"))
 
-summary(model1)
+stargazer::stargazer(model1, 
+                     type = "text", 
+                     title = "Logit Regression Output for Full Model")
 ```
 
 The coefficients (or "Estimate" in the regression output) of the explanatory variables refers to the effect on the log-odds and not the probability itself.
@@ -244,7 +247,9 @@ model2 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree,
               data = data,
               family = binomial(link = "logit"))
 
-summary(model2)
+stargazer::stargazer(model2, 
+                     type = "text", 
+                     title = "Logit Regression Output for Restricted Model")
 ```
 
 ```{r lrtest1}
@@ -253,7 +258,7 @@ lmtest::lrtest(model2, model1)
 
 Since the **`lrtest`** function returned a p-value more than 5%, we do not reject the null and hence, we will use the restricted model for our analysis.
 
-### 3.2(a) Testing Multicollinearity Assumption
+#### 3.2(a) Testing Multicollinearity Assumption
 
 In Section 3.1 Exploratory Data Analysis, I used the correlation matrix to determine if there are any highly correlated explanatory variables. Another method is to use the Variance Inflation Factor.
 
@@ -263,7 +268,7 @@ car::vif(model2)
 
 None of the variables has a VIF of more than 10. Therefore, it is likely that there is no multicollinearity among the explanatory variables.
 
-### 3.2(b) Testing Linearity Assumption
+#### 3.2(b) Testing Linearity Assumption
 
 To check if there is a linear relationship between the continuous explanatory variables and the logit of the response variable, we need to obtain the fitted probabilities from our model. The **`fitted.values`** function returns the probability and not the log-odds.
 
@@ -297,7 +302,9 @@ model3 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + log(pedigree),
               data = data,
               family = binomial(link = "logit"))
 
-summary(model3)
+stargazer::stargazer(model3, 
+                     type = "text", 
+                     title = "Logit Regression Output for Model With Transformed Variable")
 ```
 
 ```{r store fitted values from model3 and calculate logit}
@@ -321,7 +328,7 @@ ggplot(data = plotdata2, aes(x = logit, y = l.pedigree)) +
 
 After the log transformation, *`pedigree`* has a more linear relationship with the log-odds compared to before.
 
-### 3.2(c) Checking for Highly Influential Outliers
+#### 3.2(c) Checking for Highly Influential Outliers
 
 This requires that we find outliers that are highly influential. To determine the observations that have the highest influence, we can plot the Cook's Distance generated from the model or calculate them using **`cooks.distance`** function. To determine the outliers, we use the standardized residuals and check if there are any observations with absolute values greater than 3. We can also use the **`outlierTest`** function in the **`car`** package to calculate the studentized residuals.
 
@@ -345,7 +352,7 @@ car::outlierTest(model3)
 
 I had found no outliers that were highly influential based on the tests that were conducted. If outliers were found, instead of removing them, it is better to investigate these observations to check if they were erroneously measured or recorded.
 
-## 3.3 Evaluating the Models
+## 4 Evaluating the Models
 
 Now that we have created a few models, we can evaluate how each model performs in predicting the in-sample observations. We first store the fitted values of different models and I will set the cutoff at 0.5 to determine whether an observation would be positive or negative to make things simple for now.
 
@@ -358,21 +365,23 @@ prob.model1 <- fitted.values(model1) #can also use predict(model1, type="respons
 ```{r prediction and conMat model1}
 prediction.model1 <- as.factor(ifelse(prob.model1 > 0.5, "pos", "neg"))
 
-confusionMatrix(data$diabetes,
-                prediction.model1,
-                dnn = c("Actual", "Predicted"))
+confusionMatrix(data = prediction.model1,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
 ```
 
-`model1` was able to predict 316 negatives that are actually negatives and predict 101 positives that are actually positive. It predicted 76 negatives when they are actually positive observations and predicted 39 positive observations when they are actually negative. Since this is a model to predict whether a person is diabetic, the 76 false negative would be a problem as it would result in life-threatening situations. The 39 false positive could be lowered, but there is always a trade-off in using prediction models and we should also consider the costs involved in real-life situations.
+`model1` was able to predict 316 negatives that are actually negatives (True Negatives) and predict 101 positives that are actually positive (True Positives). It predicted 76 negatives when they are actually positive observations (False Negatives) and predicted 39 positive observations when they are actually negative (False Positives). Since this is a model to predict whether a person is diabetic, the 76 false negatives could be a more serious problem as it would result in life-threatening situations. The 39 false positive could be lowered, but there is always a trade-off in using prediction models and we should also consider the costs involved in real-life situations.
 
 ### Model 2: Restricted Model (Not Transformed)
 
 ```{r prediction and conMat model2}
 prediction.model2 <- as.factor(ifelse(prob.model2 > 0.5, "pos", "neg"))
 
-confusionMatrix(data$diabetes,
-                prediction.model2,
-                dnn = c("Actual", "Predicted"))
+confusionMatrix(data = prediction.model2,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
 ```
 
 ### Model 3: Restricted Model with Transformation
@@ -380,14 +389,29 @@ confusionMatrix(data$diabetes,
 ```{r prediction and conMat model3}
 prediction.model3 <- as.factor(ifelse(prob.model3 > 0.5, "pos", "neg"))
 
-confusionMatrix(data$diabetes, 
-                prediction.model3,
-                dnn = c("Actual", "Predicted"))
+confusionMatrix(data = prediction.model3,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
 ```
 
-We can see that Models 2 and 3 have the same evaluation but these models did better than Model 1.
+We can see that Models 2 and 3 have the same evaluation but these models did better than Model 1 based on the accuracy of 0.7989 for Models 2 and 3 compared to 0.7989 for Model 1 (how well it was able to correctly identify positive and negative). However, accuracy should not be the sole measure of better models as it could increase despite having more false negatives or false positives. Here are some other measures that should be considered:
 
-# References
+| Metric             | Description                                           |
+|--------------------|-------------------------------------------------------|
+| Precision          | How well model was able to correctly predict positive cases, $TP/(TP+FP)$ (useful when concerned with false positive over false negatives) |
+| Recall/Sensitivity | How well model was able to predict actual positive cases, $TP/(TP+FN)$ (useful when concerned with false negative over false positive) |
+| F1 Score           | Combines Precision and Recall, $2 \times (Precision \times Recall)/(Precision + Recall)$ (useful when FP and FN are equally costly) |
+| Specificity        | How well model was able to correctly predict negative cases, $TN/(TN+FP)$ (also called true negative rate |
+
+
+## 5 Determining the Cut-off Probability
+
+Rather than using an arbitrary cut-off probability, we can use the Receiver Operating Curve (ROC) to determine a better cut-off probability which can increase the true positives while lowering the false negatives. I would use Model 2 to illustrate the use of the in determining the threshold value.
+
+
+
+## References
 
 <https://www.statisticssolutions.com/free-resources/directory-of-statistical-analyses/assumptions-of-logistic-regression/>
 

@@ -6,8 +6,22 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
 
+## 2 Packages Required
+
+```{r load packages, message=FALSE, class.source = "fold-show"}
+# Use install.packages("packagename") if the packages are not installed in R
+library(car) 
+library(caret) # For building ML models
+library(corrplot) # For correlation plot
+library(tidyverse) # For ggplot and dplyr packages
+library(mlbench) # For data sets
+library(lmtest) # For statistical tests
+library(glmnet) # For LASSO logistic regression
+library(ROCR) # For determining cutoff-probability using ROC
+library(stargazer) # For neat tables and outputs, where possibles
 ```
 
 # 4 Binary Classification Using Other Dataset With Out-of-Sample Evaluation
