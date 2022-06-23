@@ -5,7 +5,7 @@ Each folder contains a different type of project and more sub-folders may be add
 
 # What is in each folder?
 Each folder contains a few things.  
-- Files beginning with MD: Markdown files that can be rendered in github
+- Files beginning with MD or HTML: Markdown files that can be rendered in github or HTML files rendered using R Markdown which are the main files for viewing the content
 - Files beginning with RMD: R markdown files that will not be rendered in github
 - Files beginning with Script: Contains all the codes used in the RMD
 - README: Gives an overview of the project and the content in the MD
