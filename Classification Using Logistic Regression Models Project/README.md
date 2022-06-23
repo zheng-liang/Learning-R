@@ -1,4 +1,4 @@
-# What is this project about?
+## What is this project about? (WIP)
 
 The purpose of this project is to introduce logistic regression in R and how to apply it in binary classification problems.  
 
