@@ -1,0 +1,607 @@
+---
+title: "A More Comprehensive Application to Binary Classification Using Logistic Regression"
+author: "zhengliang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# 4 Binary Classification Using Other Dataset With Out-of-Sample Evaluation
+
+In Section 3, I explored the basics of logistic regression using the **`glm`** function on the `Pima Indians Diabetes` dataset. However, real world datasets are likely to have much more attributes/variables which we might not be able to select variables simply based off p-values to indicate significance of variables. Another possible problem was the usefulness of the model to predict outcomes on out-of-sample data. Our cutoff value to determine whether a person is positive or negative was also rather arbitrary, and we could improve the prediction by giving more thought into this cutoff value. 
+
+I sought to address these problems in this section by applying more real-world techniques and comparing the predictive power of the different models. However, one should remember that the purpose of machine learning and statistical modelling are different. Machine learning usually aims for best prediction while statistical modelling might be more towards the inference of explanatory variables to the response variable.
+
+## 4.1 Dataset and Exploratory Data Analysis
+
+The dataset that I used is called [`default of credit card clients`](https://archive.ics.uci.edu/ml/datasets/default+of+credit+card+clients), which can be found in the UCI Machine Learning Repository. It contains customer credit default data from Taiwan in 2005. Other than the binary classification of default and non-default, the probability of default may also be an important result. The file downloaded is an Excel file and to load it into R, we need the **`readxl`** package.
+
+```{r load readxl package}
+library(readxl)
+```
+
+```{r load dataset from wd, message=FALSE}
+# This step loads the file from the working directory. If unsure of wd, use 
+# getwd() to check the location of the wd and setwd() to set the wd where the file is saved.
+
+default.data <- data.frame(read_excel("credit card default.xls"))
+```
+
+Let us take a peek at `default.data`.
+
+```{r head tail}
+head(default.data)
+
+tail(default.data)
+
+colnames(default.data)
+```
+
+From the **`head`** function, we saw that the first row should be the column names of the data frame and the first column should be the row names. There are many variables, 24 to be exact, with 1 dependent variable (Y, the last column) and 23 independent variables (X1 to X23). I would start by adjusting the column and row names.
+
+```{r adjust column names}
+colnames(default.data) <- default.data[1,]
+
+default.data <- default.data[-1,]
+
+head(default.data)
+```
+
+```{r adjust row names}
+# Remove the first column since ID matches the auto-assigned row numbers.
+default.data <- default.data[,-1]
+
+rownames(default.data) <- NULL # Reset the row numbers
+
+head(default.data)
+```
+
+Next, I would change the some of the column names to be something more descriptive but it is optional.
+
+```{r renaming columns}
+newnames <- c("PAY_SEP","PAY_AUG","PAY_JUL", "PAY_JUN", "PAY_MAY", "PAY_APR",
+              "BILLAMT_SEP","BILLAMT_AUG","BILLAMT_JUL", "BILLAMT_JUN", "BILLAMT_MAY", "BILLAMT_APR",
+              "PAYAMT_SEP","PAYAMT_AUG","PAYAMT_JUL", "PAYAMT_JUN", "PAYAMT_MAY", "PAYAMT_APR")
+
+oldnames <-colnames(default.data %>%
+                      dplyr::select(grep("PAY" , names(default.data)), 
+                                    grep("BILL", names(default.data)))) 
+
+colnames(default.data)[colnames(default.data) %in% oldnames] <- newnames
+
+default.data <- default.data %>%
+  rename(default = `default payment next month`)
+
+colnames(default.data)
+```
+
+I have listed the description of the variables in the table below, which can be found in the UCI Machine Learning Repository where the dataset was downloaded from.
+
+| Variable                  | Description                                                                                                         |
+|------------------------|------------------------------------------------|
+| LIMIT_BAL                 | Amount of the given credit, including both the individual consumer credit and his/her family (supplementary) credit |
+| SEX                       | Gender. Male = 1, Female = 2                                                               |
+| EDUCATION                 | Graduate School = 1, University = 2, High School = 3, Others = 4                                                    |
+| MARRIAGE                  | Married = 1, Single = 2, Others = 3                                                                                    |
+| AGE                       | In years                                                                                      |
+| PAY_SEP - PAY_APR         | History of past payment from April to September 2005. Pay duly = -1, Delay one month = 1, Delay two months = 2, ..., Delay nine months or more = 9                        |
+| BILLAMT_SEP - BILLAMT_APR | Amount of bill statement from April to September 2005.                                                                                          |
+| PAYAMT_SEP - PAYAMT_APR   | Amount of previous payment.                                                                                                          |
+| default                   | Response variable. Yes = 1, No = 0.                                                                                 |
+
+Now, we can begin exploring the data set through an Exploratory Data Analysis.
+
+```{r structure}
+str(default.data)
+```
+
+We can see that all the data values has been loaded as characters, and we need to change this to their appropriate types (numeric, factors, etc.).
+
+```{r changing value types}
+default.data <- default.data %>% 
+  mutate(
+    across(
+      c(grep("PAYAMT", names(default.data)), 
+        grep("BILLAMT", names(default.data)), 
+        "AGE", "LIMIT_BAL"), 
+      as.numeric))
+
+default.data <- default.data %>%
+  mutate(
+    across(
+      c("SEX", "EDUCATION", "MARRIAGE", "default", 
+             grep("PAY_", names(default.data))), 
+      as.factor))
+
+str(default.data)
+```
+
+```{r summary}
+summary(default.data)
+```
+
+We can see that there are some data that stands out. For example, in the variables *`EDUCATION`* and *`MARRIAGE`*, there is a value of 0 which represents none of the known classes in each of the variables. The variables *`PAY_`* has a value of -2, which was also not indicated in the description of the data. It is likely to be prepayments as variables *`BILLAMT_`* has negative values. 
+
+Let us clean the data for variables *`EDUCATION`* and *`MARRIAGE`*. Since they have each have a class called `Others`, we can consider replacing the unknown classes with this class.
+
+```{r replace unknown class with others}
+# For EDUCATION
+levels(default.data$EDUCATION)[levels(default.data$EDUCATION) %in% c("0", "5", "6")] <- "4"
+
+# For MARRIAGE
+levels(default.data$MARRIAGE)[levels(default.data$MARRIAGE) == "0"] <- "3"
+
+summary(default.data)
+```
+
+We can plot out the variables in a univariate and multivariate plots to visualize how they are distributed and correlate with one another.
+
+### 4.1.1 Univariate Plots
+
+Using the package **`gridExtra`** allows us to arrange a number of plots into a single page.
+
+```{r load gridExtra package, message=FALSE}
+library(gridExtra)
+```
+
+```{r dist of sex_educ_marr_age, message=FALSE, fig.align="center"}
+# For categorical and discrete variables
+sex <- ggplot(data = default.data) +
+  geom_bar(aes(x = SEX, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+education <- ggplot(data = default.data) + 
+  geom_bar(aes(x = EDUCATION, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+marriage <- ggplot(data = default.data) +
+  geom_bar(aes(x = MARRIAGE, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+age <- ggplot(data = default.data) +
+  geom_histogram(aes(x = AGE, fill = default)) +
+  theme(legend.title = element_text(size = 10),
+        legend.key.size = unit(0.5, "cm"),
+        axis.title.x = element_text(size = 10))
+
+gridExtra::grid.arrange(sex, education, marriage, age, ncol = 2, nrow = 2)
+```
+
+From the plots, it is hard to determine if the *`default`* variable is correlated with gender, education, marriage and age. This is because while we see higher default in certain groups, those groups also had more observations which allows us to find more people who defaulted.
+
+```{r dist billamt and payamt, fig.align="center"}
+# For continuous variables
+billamt <- default.data %>%
+  select(grep("BILLAMT", names(default.data)))
+
+payamt <- default.data %>%
+  select(grep("PAYAMT", names(default.data)))
+
+par(mfrow = c(1, 6), mar = c(1, 3, 3, 2))
+for (i in 1:6) {
+  boxplot(billamt[,i], main = names(billamt)[i])
+}
+
+par(mfrow = c(1, 6), mar = c(1, 3, 3, 2))
+for (i in 1:6) {
+  boxplot(payamt[,i], main = names(payamt)[i])
+}
+```
+
+From the boxplots, we can tell that the variables are not normally distributed as they have a very long tail (a lot of outlier points).
+
+### 4.1.2 Multivariate Plots
+
+Let us visualize the correlation between the numeric variables in `default.data`.
+
+```{r corrplot, fig.width=6, fig.height=4.5, fig.align="center"}
+correl <- default.data %>% 
+  select(where(is.numeric)) %>%
+  cor(method = "spearman")
+
+corrplot(corr = correl,
+         method = "color",
+         type = "lower")
+```
+
+We can see that the correlation between *`BILLAMT_`* variables is very high, which is likely due to the time component involved in these variables. We could expect that if the bill statement in April is high, then the bill statement in May would likely be high as well. However, it seemed that the correlation between the *`PAYAMT_`* is rather moderate. For the correlation between *`BILLAMT_`* and *`PAYAMT_`*, there seems to be a pattern of relatively higher correlation on the diagonals, i.e. between *`BILLAMT_AUG`* and *`PAYAMT_SEP`* or *`BILLAMT_JUL`* and *`PAYAMT_AUG`*. Due to the high correlation between *`BILLAMT_`* variables, I may need to create new features to reduce the multicollinearity.
+
+### 4.1.3 Creating New Variables
+
+The variable I created is the average of each observation's *`BILLAMT_`* variables, divided by its *`LIMITT_BAL`*. This new variable would help us determine the average utilization of the credit given to a person.
+
+```{r avg util}
+avg_util <- round((rowMeans(billamt) / default.data$LIMIT_BAL)*100, 4)
+```
+
+Another variable I created is the average payment over the period April to September.
+
+```{r avg pmt}
+avg_pmt <- round(rowMeans(payamt), 4)
+```
+
+I have bound the variables of interest into a new data frame called `new_data`.
+
+```{r bind variables}
+new_data <- data.frame(default.data[,1:11],
+                       avg_util,
+                       avg_pmt,
+                       default = default.data$default)
+
+head(new_data, n = 4)
+```
+
+The variables *`PAY_`* has too many classes, and there would be a need to reduce them. Looking at the variables *`PAY_`* in a table format, I have reduced the original 11 classes into 2. 0 = those who paid duly/early or delayed payment for one month, 1 = those who delayed payment for two month or more.
+
+```{r contingent table}
+cont_tab <- list(sep = table(new_data$default, new_data$PAY_SEP),
+                 aug = table(new_data$default, new_data$PAY_AUG),
+                 jul = table(new_data$default, new_data$PAY_JUL),
+                 jun = table(new_data$default, new_data$PAY_JUN),
+                 may = table(new_data$default, new_data$PAY_MAY),
+                 apr = table(new_data$default, new_data$PAY_APR))
+
+cont_tab
+```
+
+```{r changing classes}
+for (i in 6:11) {
+  levels(new_data[,i])[levels(new_data[,i]) %in% c("-2", "-1", "0", "1")] <- "0"
+  
+  levels(new_data[,i])[!levels(new_data[,i]) %in% c("-2", "-1", "0", "1")] <- "1"
+}
+
+summary(new_data)
+
+str(new_data)
+```
+
+I calculated the correlation and plotted the correlation matrix to see if the numeric variables in `new_data` data frame are highly correlated. It can be seen that none of the variables have a correlation of more than 0.7, so multicollinearity might not be a problem.
+
+```{r correl new var, fig.width=6, fig.height=4.5, fig.align="center"}
+correl <- new_data %>% 
+  select(where(is.numeric)) %>%
+  cor(method = "spearman")
+
+corrplot(corr = correl,
+         method = "color",
+         type = "lower",
+         addCoef.col = "black")
+```
+
+## 4.2 Building the Models
+
+Now that I have settled on the variables to be used for the logistic regression model, I can start to built the different models that are commonly used. Before modelling, I would split the data into training and testing sets.
+
+```{r split data}
+# Split data into 80% training and 20% testing sets
+set.seed(1)
+validation <- createDataPartition(new_data$default, p = 0.80, list = F)
+
+traindata <- new_data[validation,]
+
+testdata <- new_data[-validation,]
+```
+
+### 4.2.1 Full Model
+
+I would start with building a full model that contains all the explanatory variables.
+
+```{r full model}
+full.model <- glm(default == "1" ~ .,    # 1 refers to those who default
+                  data = traindata,
+                  family = binomial(link = "logit"))
+
+summary(full.model)
+```
+
+I used the model to calculate the variance inflation factor of each variable to test for multicollinearity. It can be seen that none of the variables has a large VIF value, so multicollinearity may not be a problem.
+
+```{r vif2}
+car::vif(full.model)
+```
+
+### 4.2.2 Restricted Model
+
+From the regression results of the `full.model`, there are the *`MARRIAGE`* variable seemed to be statistically insignificant, so I removed them while keeping the rest of the variables in the restricted model.
+
+```{r rest model wo marriage}
+# Remove marriage variables
+rest.model <- glm(default == "1" ~ .-MARRIAGE,
+                   data = traindata,
+                   family = binomial(link = "logit"))
+
+summary(rest.model)
+```
+
+I did a likelihood ratio test and found that the full model is preferred since the p-values showed strong evidence against the null hypothesis.
+
+```{r lrtest2}
+lmtest::lrtest(full.model, rest.model) # Result: Use full model
+```
+
+### 4.2.3 Checking for Influential Outliers in the Full Model
+
+I checked for highly influential observations using Cook's Distance and outliers using standardized and studentized residuals.
+
+```{r cooksd}
+# Influence using Cook's Distance
+plot(full.model, which = 4)
+
+head(sort(cooks.distance(full.model), decreasing = T))
+```
+
+```{r standardized resid}
+# Outliers with standardized/studentized residuals
+std.resid <- rstandard(full.model)
+
+val <- abs(std.resid) > 3
+
+table(val)
+
+val[val == "TRUE"] # Can be used to further investigate the observations
+```
+
+```{r studentized resid2}
+car::outlierTest(full.model) # No outliers detected by studentized residuals
+```
+
+There seemed to be 1 influential outlier detected by the standardized residuals, which could be further investigated if necessary.
+
+### 4.2.4 Checking Linearity Assumption of Full Model
+
+To check the linearity assumption, I first found the fitted values (or the probability) using the full model. Next, I calculated the log-odds (or logit), and finally plotted the log-odds against all continuous variables in my model.
+
+```{r fitvalues and logit}
+prob.fullmod <- fitted.values(full.model)
+
+logit = log(prob.fullmod/(1-prob.fullmod))
+```
+
+```{r plot, fig.align="center"}
+p1 <- ggplot(data = traindata, aes(x = logit, y = LIMIT_BAL)) +
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "loess")
+
+p2 <- ggplot(data = traindata, aes(x = logit, y = AGE)) +
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "loess")
+
+p3 <- ggplot(data = traindata, aes(x = logit, y = avg_util)) +
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "loess")
+
+p4 <- ggplot(data = traindata, aes(x = logit, y = avg_pmt)) +
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "loess")
+
+gridExtra::grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+```
+
+It would seem that the continuous variables are mostly linear to the log-odds, maybe other than for the *`LIMIT_BAL`* variable.
+
+### 4.2.5 Evaluating the Performance of the Full Model
+
+To evaluate how well the full model is able to predict whether a person would default, we need to determine the threshold value. The value will be determined using the Receiver Operating Curve (ROC) and I tested the performance on in-sample and out-of-sample data.
+
+```{r prob using full model}
+# Returns the probability of default
+res_fullmodel <- predict(full.model, traindata, type = "response")
+```
+
+```{r ROC and plot}
+# First argument: predicted probability, Second argument: observed response
+ROCpred <- ROCR::prediction(res_fullmodel, traindata$default)
+
+# Performance based on true positive rate and false positive rate
+ROCperf <- ROCR::performance(ROCpred, "tpr", "fpr")
+
+# Plot ROC and indicate threshold values
+plot(ROCperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.01),
+     text.adj = c(-0.2,1))
+```
+
+```{r conMat fullmodel is}
+# Use 0.17 as threshold
+pred.fullmodel <- as.factor(ifelse(res_fullmodel > 0.17, "1", "0"))
+
+caret::confusionMatrix(traindata$default, 
+                       pred.fullmodel, 
+                       dnn = c("Actual", "Predicted"))
+```
+
+Using `fullmodel` on the in-sample data, 12746 observations were correctly predicted as non-default and 3638 were correctly predicted as default. Since non-default is the positive class, there were 5946 false negative and 1671 false positive. In other words, the model incorrectly predicted 1671 actual defaults as non-defaults. This could have serious implications to a financial institution depending on the size of the credit. The 5946 actual non-defaults predicted as defaults would also have implications in the form of higher monitoring costs, or financial institutions might reject giving credit to borrowers who are unlikely to default.
+
+```{r conMat fullmodel oos}
+# Change to testdata instead for out-of-sample evaluation
+res_fullmodel <- predict(full.model, testdata, type = "response")
+
+# Use the same threshold as in-sample evaluation
+pred.fullmodel <- as.factor(ifelse(res_fullmodel > 0.17, "1", "0"))
+
+caret::confusionMatrix(testdata$default,
+                       pred.fullmodel,
+                       dnn = c("Actual", "Predicted"))
+```
+
+Using the out-of-sample data, the `fullmodel` incorrectly predicted 385 actual defaults as non-default. However, in terms of the accuracy of the model, it was the same as using in-sample data. Since this is out-of-sample data, we could say that banks might turn away 1514 customers as the model predicted that they will default, although they would not.
+
+## 4.3 Stepwise Model Using Backward Elimination
+
+These techniques selects variables that are usually statistically significant or meet certain requirements, such as lowest AIC or BIC. However, there are many arguments online and from research articles against using such techniques. However, it does provide a quick and easy way to get a model from multiple explanatory variables and we can use it as a benchmark.
+
+### 4.3.1 Creating the Model
+
+Backward elimination starts off with a model that contains all the explanatory variables and removes them one at a time to reduce AIC, with the variable that causes the largest reduction to be removed first. Before that, let us create a null model that does not use any explanatory variables.
+
+```{r null model}
+# Create a null model that predicts using grand mean
+null.model <- glm(default == "1" ~ 1,
+                  data = traindata,
+                  family = binomial(link = "logit"))
+
+summary(null.model)
+```
+
+```{r bwd model}
+bwd.model <- step(full.model,
+                  scope = list(lower = null.model, upper = full.model),
+                  direction = "backward", 
+                  k = 2,
+                  trace = T)
+# Indicate scope argument to define range of models to examine
+# Indicate direction = "backward" for backward elimination
+# Indicate k = 2 for AIC, k = log(n) for BIC
+# Indicate trace = F if want to suppress the running of the step by step regression
+
+summary(bwd.model)
+```
+
+Based on the backward elimination approach, the full model (containing all explanatory variables) leads to the lowest AIC.
+
+### 4.3.2 Evaluating the Stepwise Model
+
+Since the stepwise model using backward elimination is the same as the full model is Section 4.2, the accuracy of the model would be the same.
+
+```{r ROC stepmodel is}
+res_stepmodel <- predict(bwd.model, traindata, type = "response")
+
+ROCpred <- ROCR::prediction(res_stepmodel, traindata$default)
+
+ROCperf <- ROCR::performance(ROCpred, "tpr", "fpr")
+
+plot(ROCperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.01),
+     text.adj = c(-0.2,1))
+```
+
+```{r conMat stepmodel is}
+# Use 0.17
+pred.stepmodel <- as.factor(ifelse(res_stepmodel > 0.17, "1", "0"))
+
+caret::confusionMatrix(traindata$default,
+                       pred.stepmodel,
+                       dnn = c("Actual", "Predicted"))
+```
+
+```{r conMat stepmodel oos}
+res_stepmodel <- predict(bwd.model, testdata, type = "response")
+
+pred.stepmodel <- as.factor(ifelse(res_stepmodel > 0.17, "1", "0"))
+
+caret::confusionMatrix(testdata$default,
+                       pred.stepmodel,
+                       dnn = c("Actual", "Predicted"))
+```
+
+## 4.4 LASSO Logistic Model
+
+Another method of selecting explanatory variables is the LASSO regression, which shrinks the coefficients of variables that are not important to zero. This can be done in R using the **`glmnet`** package.
+
+### 4.4.1 Converting Data Frame to Matrix
+
+Before we can run the lasso logistic regression, the data frame has to be converted into a matrix for **`glmnet`** to run. We also need to convert categorical variables into suitable dummy variables. All this can be done using the **`model.matrix`** function.
+
+```{r model.matrix}
+x_var <- model.matrix(default ~ ., traindata)[,-1] # Remove intercept column
+
+y_var <- ifelse(traindata$default == "1", 1, 0)
+```
+
+### 4.4.2 Calculating lambda
+
+For LASSO regression, there is a need to specify the lambda value, which is the amount of the penalty added to the log-likelihood function. The optimal lambda value can be obtained using the **`cv.glmnet`** function. I have chosen to use the `lambda.1se` value which would give a simpler model, but `lambda.min` can also be chosen to obtain a more complex model.
+
+```{r lambda}
+lasso.lambda <- glmnet::cv.glmnet(x_var, 
+                                  y_var, 
+                                  alpha = 1,
+                                  family = "binomial",
+                                  type.measure = "class") # lambda that optimizes the misclassification error
+# alpha = 1 for lasso, family = "binomial" for logistic regression
+```
+
+```{r optimal lambda}
+# optimal value of lambda
+opt.lambda <- lasso.lambda$lambda.1se
+
+opt.lambda
+```
+
+### 4.4.3 Fitting the LASSO Logistic Model
+
+Now that the lambda value has been obtained and stored, the LASSO logit regression model can be fitted. Unfortunately, the **`summary`** function does not show the coefficients like the models fitted using **`glm`**. To extract the intercept and coefficients, add `$a0` and `$beta` to the model name.
+
+```{r lasso model}
+lasso.model <- glmnet(x_var,
+                      y_var,
+                      alpha = 1,
+                      family = "binomial",
+                      lambda = opt.lambda)
+
+lasso.model$a0; lasso.model$beta # intercept and coefficients
+```
+
+### 4.4.4 Evaluating the LASSO Logistic Model
+
+```{r ROC lasso is}
+res_lassomodel <- predict(lasso.model, x_var, type = "response")
+
+ROCpred <- ROCR::prediction(res_lassomodel, factor(y_var))
+
+ROCperf <- ROCR::performance(ROCpred, "tpr", "fpr")
+
+plot(ROCperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.01),
+     text.adj = c(-0.2,1))
+```
+
+```{r conMat lasso is}
+## Use 0.17 as threshold
+pred.lasso <- as.factor(ifelse(res_lassomodel > 0.17, "1", "0"))
+
+caret::confusionMatrix(factor(y_var),
+                       pred.lasso,
+                       dnn = c("Actual", "Predicted"))
+```
+
+The LASSO logistic regression model has led to a higher accuracy than the full model and the stepwise model. However, there is an increase in the misclassification of actual defaults as non-defaults.
+
+```{r convert testdata to matrix}
+xtest <- model.matrix(default ~ ., testdata)[,-1] # Remove intercept column
+ytest <- ifelse(testdata$default == "1", 1, 0)
+```
+
+```{r conMat lasso oos}
+res_lassomodel <- predict(lasso.model, xtest, type = "response")
+
+pred.lasso <- as.factor(ifelse(res_lassomodel > 0.17, "1", "0"))
+
+caret::confusionMatrix(factor(ytest),
+                       pred.lasso,
+                       dnn = c("Actual", "Predicted"))
+```
+
+With the out-of-sample data, banks might refuse giving credit to 1087 borrowers who are unlikely to default and give credit to 477 borrowers who are likely to default by using this model.
+
+# 5 Final Remarks
+
+Real-world models would be more complicated than these, and may take into account qualitative variables as well. However, this give a baseline to how well logistic regression models would work in binary classification problems. It is important to note that the models in this project do not consider a cost to misclassification, which is an important factor in real-world problems. There could also be a trade-off involved in the costs of false positives and false negatives and there would be a need to weigh these costs to select the best model to be implemented.
+
+# References
+
+<https://bookdown.org/tpinto_home/Regularisation/lasso-regression.html>
