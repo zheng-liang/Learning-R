@@ -1,11 +1,24 @@
-## What is this project about? (WIP)
+## What is this project about?
 
-The purpose of this project is to introduce logistic regression in R and how to apply it in binary classification problems.  
+The purpose of this project is to introduce logistic regression in R and how to apply it in binary classification problems.
+I have split the project into two core projects.  
 
-The first part introduces logistic regression and the assumptions of logistic regression.  
+### 1. Binary Classification Using Logistic Regression Models
 
-The second part shows how logistic regression is applied in binary classification problems using a dataset in one of the R packages.
+The first project of the Classification Using Logistic Regression Models Project has 4 main parts. The first part introduces 
+logistic regression and the assumptions of logistic regression. The second part shows how logistic regression is applied in 
+binary classification problems using a data set in the `mlbench` package called `PimaIndiansDiabetes`. The third part introduces the
+Receiver Operating Characteristic and Precision-Recall curves to decide on an appropriate probability threshold. The final part shows common
+methods of dealing with imbalanced data sets.  
 
-The third and final part applies binary logistic regression on an external dataset from the UCI Machine Learning Repository with more practical approaches,
-such as using the Receiver Operating Curve to determine the cut-off probability. The evaluation of the models' performance is done on in-sample and out-of-sample data.  
+Click the link to access the rendered HTML file: https://tinyurl.com/c276mvp7  
 
+### 2. A More Comprehensive Application to Binary Classification Using Logistic Regression (Work-in-Progress)
+
+The second project uses the [`Default of Credit Card Clients`](https://archive.ics.uci.edu/ml/datasets/default+of+credit+card+clients)
+data set from the UCI Machine Learning Repository. It is a highly imbalanced data set and has many variables (up to 23, excluding the class
+variable to predict). This would help me to learn more about feature/variable selection either by creating new variables or using techniques
+such as stepwise or LASSO regression. It will also determine if the methods used for dealing with imbalanced data sets are robust enough
+when using the models for out-of-sample prediction.  
+
+Status: Project incomplete! No link to show for now. :weary:
