@@ -79,11 +79,13 @@ A large sample size is needed to produce conclusive results.
 library(car) 
 library(caret) # For building ML models
 library(corrplot) # For correlation plot
-library(tidyverse) # For ggplot and dplyr packages
-library(mlbench) # For data sets
+library(smotefamily) # For SMOTE when there are imbalanced datasets
 library(lmtest) # For statistical tests
+library(mlbench) # For data sets
 library(ROCR) # For determining cutoff-probability using ROC
+library(ROSE) # For re-sampling techniques when there are imbalanced datasets
 library(stargazer) # For neat tables and outputs, where possibles
+library(tidyverse) # For ggplot and dplyr packages
 ```
 
 These packages provide the necessary functions and data sets that can be used for learning and building logistic classification models.
@@ -395,21 +397,207 @@ confusionMatrix(data = prediction.model3,
                 positive = "pos", mode = "everything")
 ```
 
-We can see that Models 2 and 3 have the same evaluation but these models did better than Model 1 based on the accuracy of 0.7989 for Models 2 and 3 compared to 0.7989 for Model 1 (how well it was able to correctly identify positive and negative). However, accuracy should not be the sole measure of better models as it could increase despite having more false negatives or false positives. Here are some other measures that should be considered:
+We can see that Models 2 and 3 have the same evaluation but these models did better than Model 1 based on the accuracy of 0.7989 for Models 2 and 3 compared to 0.7989 for Model 1 (how well it was able to correctly identify actual positive and negative). However, accuracy should not be the sole measure of better models as it could increase despite having more false negatives or false positives. Here are some measures that should be considered for classification models:
 
 | Metric             | Description                                           |
 |--------------------|-------------------------------------------------------|
 | Precision          | How well model was able to correctly predict positive cases, $TP/(TP+FP)$ (useful when concerned with false positive over false negatives) |
 | Recall/Sensitivity | How well model was able to predict actual positive cases, $TP/(TP+FN)$ (useful when concerned with false negative over false positive) |
 | F1 Score           | Combines Precision and Recall, $2 \times (Precision \times Recall)/(Precision + Recall)$ (useful when FP and FN are equally costly) |
-| Specificity        | How well model was able to correctly predict negative cases, $TN/(TN+FP)$ (also called true negative rate |
+| Specificity        | How well model was able to predict actual negative cases, $TN/(TN+FP)$ (also called true negative rate) |
 
 
 ## 5 Determining the Cut-off Probability
 
-Rather than using an arbitrary cut-off probability, we can use the Receiver Operating Curve (ROC) to determine a better cut-off probability which can increase the true positives while lowering the false negatives. I would use Model 2 to illustrate the use of the in determining the threshold value.
+Rather than using an arbitrary cut-off probability, we can use the Receiver Operating Characteristic (ROC) curve to determine a better cut-off probability which can increase the true positives while lowering the false negatives. I used Model 2 to illustrate the use of the ROC curve in determining the threshold value.
 
+The ROC curve plots the True Positive Rate (or Recall/Sensitivity) against the False Positive Rate at different probability thresholds. To plot the ROC curve, we need the functions **`prediction`** and **`performance`** in the **`ROCR`** package. The former function will produce prediction results at different thresholds while the latter function plots them based on different metrics specified.
 
+```{r ROC and plot}
+# First argument is the probabilities extracted using fitted() or predict()
+# Second argument is the classification labels with same dimensions as first argument
+# Third argument is the order, with first label being negative, second being positive class
+ROCRpred <- ROCR::prediction(predictions = prob.model2, labels = data$diabetes, label.ordering = c("neg" , "pos"))
+
+# Performance based on true positive rate and false positive rate (ROC curve)
+ROCperf <- ROCR::performance(prediction.obj = ROCRpred, measure = "tpr", x.measure = "fpr")
+
+# Plot ROC Curve and indicate threshold value
+plot(ROCperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.05), 
+     text.adj = c(-0.2, 1),
+     main = "ROC Curve for Pima Indians Diabetes Dataset")
+```
+
+From the ROC curve, we can see the trade-off between TPR and FPR at different probability thresholds. If we do not mind having more false positives, we can increase the number of true positives detected by the model by using a threshold lower than 0.5, for example at 0.35 to keep the FPR around 0.2 but increasing the TPR to about 0.75-0.8. However, as discussed previously, false negatives are much more of a concern to us since the purpose of the model is to predict if a person is diabetic or not. In such cases, we should use another plot called the Precision-Recall Curve (particularly in cases where there are class imbalances.)
+
+```{r prec_rec plot}
+# Performance based on precision and recall
+Precperf <- ROCR::performance(prediction.obj = ROCRpred, measure = "prec", x.measure = "rec")
+
+# Plot Precision-Recall Curve with threshold values
+plot(Precperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.05), 
+     text.adj = c(-0.2, 1),
+     main = "Precision-Recall Curve for Pima Indians Diabetes Dataset")
+```
+
+Based on the trade-off between the Precision and Recall scores, we could have the threshold at 0.35 since it greatly increases Recall (better when FN are more costly that FP) while leading to a slight reduction in Precision. Let us use the confusion matrix to evaluate if this probability threshold is better than using 0.5.
+
+```{r conMat 0.3}
+new_pred.model2 <- as.factor(ifelse(prob.model2 > 0.35, "pos", "neg"))
+
+confusionMatrix(data = new_pred.model2,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+
+```
+
+By changing the threshold, I was able to decrease the number of False Negatives and increase the number of True Positives. However, this came at the cost of reduced True Negatives and increased False Positives. There are definitely more sophisticated methods to determine the appropriate threshold values, but these are the simpler methods that can be applied.
+
+## 6 Dealing With Imbalanced Datasets
+
+In Section 3.1 Exploratory Data Analysis, the plot of the distribution of the class *`diabetes`* revealed that there are about twice as many negative observations than positive observations. While this might not be considered a serious imbalanced dataset, we do have lesser observations of one class compared to the other. It is not uncommon for datasets to have more observations of one class compared to another due to their natural rate of occurrence and sampling techniques. Imbalanced datasets pose the risk of biased prediction as it can identify the majority class more easily than the minority class.
+
+The three common techniques to deals with this issue are under-sampling, over-sampling and synthetic minority over-sampling technique (SMOTE). Under-sampling randomly removes observations of the majority class while over-sampling randomly replicates observations of the minority class to balance the dataset. Under-sampling reduces information about the majority class while over-sampling simply replicates observations which could lead to overfitting. SMOTE is another over-sampling method but instead of replicating the observations, it creates artificial data with respect to the minority class by using the nearest neighbor technique between the minority class.
+
+The **`ROSE`** package can be used for under-sampling and over-sampling the dataset, while the **`smotefamily`** package can be used for SMOTE. In our original data, we had 355 negative observations and 177 positive observations, and we can compare how it has changed after the re-sampling is done.
+
+### Under-Sampling Method
+
+```{r undersample data}
+# Argument 1 indicates the class vs all other variables in the dataset
+# Argument 2 indicates where to find the data
+# Argument 3 indicates whether to over- or under-sample
+# Argument 4 indicates target number of observations, in this case I put 2 times of the minority class
+
+undersample <- ROSE::ovun.sample(diabetes ~ ., 
+                                 data = data, 
+                                 method = "under", 
+                                 N = 177*2)
+
+summary(undersample)
+```
+
+### Over-Sampling Method
+
+```{r oversample data}
+# For over-sampling, I indicate 2 times of majority class for target number of observations
+
+oversample <- ROSE::ovun.sample(diabetes ~ .,
+                                data = data,
+                                method = "over",
+                                N = 355*2)
+
+summary(oversample)
+```
+
+### SMOTE Method
+
+```{r smote data}
+# X refers to data frame or matrix containing numeric-attributed explanatory variables
+# target refers to vector of the class corresponding to X
+# K = 5 is the default number of nearest neighbors, SMOTE uses KNN to generate artificial data
+# dup_size refers to the multiples of minority observations compared to majority observations
+# In this case, 1 means to generate 1 minority for 1 majority observation
+
+smote <- smotefamily::SMOTE(X = explvar,
+                            target = response, 
+                            K = 5, 
+                            dup_size = 1)
+
+# Extract the newly generated data set that contains both the synthetic and original observations
+smote_data <- smote$data
+
+summary(smote_data)
+
+# diabetes variable has been replaced by class and is in character class, need to change it to factor
+smote_data$class <- factor(smote_data$class)
+
+summary(smote_data)
+```
+
+For the under-sampling method, the number of majority class observations has been reduced to 177, while for the over-sampling method, the number of the minority class observations was increased to 355. For SMOTE, we can see that the number of positive observations have been increased and nearly matches the number of the negative observations. For all three techniques, we do not see a difference in the minimum and maximum values of the explanatory variables, but there are differences in the mean and median values.
+
+### 6.1 Evaluating the Performance of Under-Sampling Method
+
+To evaluate the performance of these different sampling techniques, I estimated a restricted model just like Model 2 and used a cut-off probability of 0.5 to make it easily comparable to the scores of Model 2 in Section 4.
+
+```{r model4 undersamp restricted}
+model4 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree, 
+              data = undersample$data, 
+              family = binomial(link = "logit"))
+
+stargazer(model4, 
+          type = "text", 
+          title = "Logit Regression Output for Under-Sampling Method")
+```
+
+```{r prob model4 and conMat}
+prob.model4 <- predict(model4, type = "response")
+
+prediction.model4 <- as.factor(ifelse(prob.model4 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model4,
+                reference = undersample$data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### 6.2 Evaluating the Performance of Over-Sampling Method
+
+```{r model5 oversamp restricted}
+model5 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree,
+              data = oversample$data,
+              family = binomial(link = "logit"))
+
+stargazer(model5, 
+          type = "text", 
+          title = "Logit Regression Output for Over-Sampling Method")
+```
+
+```{r prob model5 and conMat}
+prob.model5 <- predict(model5, type = "response")
+
+prediction.model5 <- as.factor(ifelse(prob.model5 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model5,
+                reference = oversample$data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### 6.3 Evaluating the Performance of SMOTE Method
+
+```{r model6 smote restricted}
+model6 <- glm(class == "pos" ~ pregnant + glucose + mass + pedigree,
+              data = smote_data,
+              family = binomial(link = "logit"))
+
+stargazer(model6, 
+          type = "text", 
+          title = "Logit Regression Output for SMOTE Method")
+```
+
+```{r prob model6 and conMat}
+prob.model6 <- predict(model6, type = "response")
+
+prediction.model6 <- as.factor(ifelse(prob.model6 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model6,
+                reference = smote_data$class,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### 6.4 Summary of Performance of Re-Sampling Imbalanced Data
+
+Compared to Model 2's performance in Section 4, all 3 models showed higher Precision, Recall and F1 scores. Since these are all ratios, they The reason for not using ROC and the Precision-Recall curves to determine a more appropriate probability cut-off value is because it will be rather subjective, unless we use benchmark, for example maximum accuracy or maximum area under the ROC curve. 
+
+However, what I did not do was to test out-of-sample prediction since I wanted this to be an introduction to the methods of binary classification using logistic regression. I will provide a more comprehensive application of logistic regression in binary classification in another project using another dataset that would be more challenging, with the imbalance more heavily skewed to one class than the other. 
 
 ## References
 
@@ -423,4 +611,8 @@ Rather than using an arbitrary cut-off probability, we can use the Receiver Oper
 
 <https://ademos.people.uic.edu/Chapter22.html>
 
+<https://developers.google.com/machine-learning/crash-course/classification/roc-and-auc>
 
+<https://machinelearningmastery.com/roc-curves-and-precision-recall-curves-for-classification-in-python/#:~:text=A%20precision%2Drecall%20curve%20is,constant%20class%20in%20all%20cases.>
+
+<https://www.analyticsvidhya.com/blog/2016/03/practical-guide-deal-imbalanced-classification-problems/>
