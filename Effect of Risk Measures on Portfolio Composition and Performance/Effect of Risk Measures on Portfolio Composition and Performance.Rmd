@@ -1,0 +1,136 @@
+---
+title: "Effect of Risk Measures on Portfolio Composition and Performance"
+author: "zhengliang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The purpose of this project is to determine the effect of different risk measures on portfolio performance. This project uses the Variance/Standard Deviation, Semi-Variance/Semi-Deviation, Downside Deviation, Value-at-Risk (VaR) and Conditional Value-at-Risk (CVaR) as the measures of risk for comparison.
+
+The first part introduces the different risk measures using a single security. The second part shows how the different risk measures are used to optimize a portfolio with more than one security for a single-period.
+
+The results in this project should not be taken as investment advice, and is not intended to be investment advice.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ROI) # For portfolio optimization (needed for semi-deviation optimization)
+library(ROI.plugin.glpk) # Part of ROI solver
+library(ROI.plugin.quadprog) # Part of ROI solver
+library(PerformanceAnalytics) # For portfolio performance and risk analysis
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(quantmod) # For obtaining historical prices from Yahoo Finance
+```
+
+## 3 Understanding Risk Measures
+
+In this section, the different risk measures are introduced, starting with Variance/Standard Deviation as it is the fundamental risk measure of the Mean-Variance Framework developed by Harry Markowitz. Subsequently, I described the Semi-Variance/Semi-Deviation and Downside Deviation that measures only the downside risk or the negative fluctuations, followed by VaR and CVaR which measures the tail risk. The **`PerformanceAnalytics`** package provides the necessary functions for the different risk measures.
+
+I used the stock returns of Microsoft Corporation (MSFT) to illustrate the different risk measures, which can be obtained using the **`getSymbols`** function in **`quantmod`** package.
+
+```{r msft price}
+MSFT <- quantmod::getSymbols(Symbols = "MSFT", # Indicate a symbol that corresponds to stock in Yahoo Finance
+                             src = "yahoo", # Indicate to search stock prices from Yahoo Finance
+                             from = "2010-01-01", # Indicate a start date
+                             to = "2022-05-31", # Indicate an end date
+                             periodicity = "daily", # Indicate the periodicity of prices to retrieve, can also be "weekly" or "monthly"
+                             auto.assign = F) # Indicate FALSE so that results are assigned to variable we indicate
+
+head(MSFT, 4); tail(MSFT, 4)
+
+colSums(is.na(MSFT)) # To check for NA values
+```
+
+The adjusted price would be used to calculate the daily return since it has been adjusted for dividend and splits.
+
+```{r msft returns}
+MSFT_returns <- PerformanceAnalytics::Return.calculate(prices = MSFT[,6], # Use the 6th column of MSFT (Adjusted Price)
+                                                       method = "discrete" # Calculate the arithmetic/discrete returns, use "log" for log/continuous returns
+                                                       )[-1,] # Remove first row since first price observation cannot be used to calculate return
+
+head(MSFT_returns, 4)
+```
+
+### 3.1 Variance and Standard Deviation
+
+The variance measures the sum of squared deviations from the expected return and this can be written as:
+
+$$
+\sigma^2_i = \sum^N_{n=1} \frac{(R_n - \bar{R})^2}{N-1}
+$$
+
+The standard deviation is the square root of the variance or $\sqrt{\sigma^2_i}$. We can calculate the standard deviation of returns using the function **`StdDev`**.
+
+```{r stddev msft}
+MSFT_sd <- PerformanceAnalytics::StdDev(R = MSFT_returns)
+
+MSFT_sd
+```
+
+The value of 0.016 means that the expected daily return would range between the mean return +/- 0.016.
+
+However, the variance and standard deviation as a measure of risk are typically countered by two specific arguments. Firstly, it assumes that returns are normally distributed, which is usually not satisfied when dealing with financial returns. Secondly, it penalizes downside and upside moves equally, which is usually not true since investors are more concerned with downside risks than upside risks. Therefore, different measures of risk have been developed to capture the left side of the distribution instead.
+
+```{r distribution of msft returns}
+PerformanceAnalytics::chart.Histogram(MSFT_returns)
+
+PerformanceAnalytics::skewness(MSFT_returns, method = "sample"); PerformanceAnalytics::kurtosis(MSFT_returns, method = "sample")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## References
+
+<https://pages.stern.nyu.edu/~adamodar/pdfiles/valrisk/ch4.pdf>
+
+
+
+
+
+
