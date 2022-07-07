@@ -15,9 +15,9 @@ knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 ## 1 Introduction
 
-The purpose of this project is to determine the effect of different risk measures on portfolio performance. This project uses the Variance/Standard Deviation, Semi-Variance/Semi-Deviation, Downside Deviation, Value-at-Risk (VaR) and Conditional Value-at-Risk (CVaR) as the measures of risk for comparison.
+The purpose of this project is to determine the effect of different risk measures on portfolio performance. This project uses the Variance/Standard Deviation, Semi-Variance/Semi-Deviation, Downside Deviation (DD), Value-at-Risk (VaR) and Conditional Value-at-Risk (CVaR) as the measures of risk for comparison.
 
-The first part introduces the different risk measures using a single security. The second part shows how the different risk measures are used to optimize a portfolio with more than one security for a single-period.
+The first part introduces the different risk measures using a single security. The second part shows how the different risk measures are used to optimize a portfolio with more than one security for a single-period. I first created a category of portfolios that minimizes the different risk measures, then created a category of optimal portfolios that minimizes the different risk measures for a given level of return. In each category of portfolios, I compared their performance and charted their cumulative returns.
 
 The results in this project should not be taken as investment advice, and is not intended to be investment advice.
 
@@ -40,14 +40,17 @@ In this section, the different risk measures are introduced, starting with Varia
 I used the stock returns of Microsoft Corporation (MSFT) to illustrate the different risk measures, which can be obtained using the **`getSymbols`** function in **`quantmod`** package.
 
 ```{r msft price}
+startdate <- "2010-01-01"
+enddate <- "2022-06-01"
+
 MSFT <- quantmod::getSymbols(Symbols = "MSFT", # Indicate a symbol that corresponds to stock in Yahoo Finance
                              src = "yahoo", # Indicate to search stock prices from Yahoo Finance
-                             from = "2010-01-01", # Indicate a start date
-                             to = "2022-05-31", # Indicate an end date
+                             from = startdate, # Indicate a start date
+                             to = enddate, # Indicate an end date
                              periodicity = "daily", # Indicate the periodicity of prices to retrieve, can also be "weekly" or "monthly"
                              auto.assign = F) # Indicate FALSE so that results are assigned to variable we indicate
 
-head(MSFT, 4); tail(MSFT, 4)
+head(MSFT, n = 4); tail(MSFT, n = 4)
 
 colSums(is.na(MSFT)) # To check for NA values
 ```
@@ -67,28 +70,227 @@ head(MSFT_returns, 4)
 The variance measures the sum of squared deviations from the expected return and this can be written as:
 
 $$
-\sigma^2_i = \sum^N_{n=1} \frac{(R_n - \bar{R})^2}{N-1}
+\sigma^2 = \sum^N_{n=1} \frac{(R_n - E(R))^2}{N}
 $$
 
 The standard deviation is the square root of the variance or $\sqrt{\sigma^2_i}$. We can calculate the standard deviation of returns using the function **`StdDev`**.
 
 ```{r stddev msft}
-MSFT_sd <- PerformanceAnalytics::StdDev(R = MSFT_returns)
+MSFT_stddev <- PerformanceAnalytics::StdDev(R = MSFT_returns)
 
-MSFT_sd
+MSFT_stddev
 ```
 
-The value of 0.016 means that the expected daily return would range between the mean return +/- 0.016.
+The value of 0.016 means that 68% of the expected daily return would range between the mean return $\pm$ 0.016 (1 sd).
 
-However, the variance and standard deviation as a measure of risk are typically countered by two specific arguments. Firstly, it assumes that returns are normally distributed, which is usually not satisfied when dealing with financial returns. Secondly, it penalizes downside and upside moves equally, which is usually not true since investors are more concerned with downside risks than upside risks. Therefore, different measures of risk have been developed to capture the left side of the distribution instead.
+However, the variance and standard deviation as a measure of risk are typically countered by two arguments. Firstly, it assumes that returns are normally distributed, which is usually not satisfied when dealing with financial returns. Secondly, it penalizes downside and upside risks equally, but investors are usually more concerned with downside risks than upside risks. In optimizing portfolio composition, the Mean-Variance Framework limits not just the losses, but also the gains. Therefore, different measures of risk have been developed to capture the left side of the distribution instead.
 
 ```{r distribution of msft returns}
-PerformanceAnalytics::chart.Histogram(MSFT_returns)
+PerformanceAnalytics::chart.Histogram(MSFT_returns, 
+                                      main = "Distribution of MSFT Daily Returns",
+                                      methods = c("add.density", "add.normal"))
 
-PerformanceAnalytics::skewness(MSFT_returns, method = "sample"); PerformanceAnalytics::kurtosis(MSFT_returns, method = "sample")
+PerformanceAnalytics::skewness(MSFT_returns, method = "sample")
 
-
+PerformanceAnalytics::kurtosis(MSFT_returns, method = "sample")
 ```
+
+The daily return distribution of MSFT is slightly positively skewed, and has very high kurtosis (normal distribution has kurtosis of 3). Majority of the daily returns are concentrated around the mean as can be seen in the chart, but there are very long-tails, meaning that there can be extremely large daily losses or gains. Hence, the daily returns of MSFT are not normally distributed (can be confirmed with a formal test, such as Jarque-Bera or Shapiro-Wilks Test).
+
+### 3.2 Semi-Variance and Semi-Deviation
+
+The semi-variance and semi-deviation is similar to the variance and standard deviation, except that it only measures deviations below the expected return or the downside risk. The semi-deviation formula is written as:
+
+$$
+\sigma_{semi} = \sqrt{\sum_{n=1}^N \frac{\min(R_n - E(R), 0)^2}{N}} ~, \text{where N = total number of observations}
+$$
+
+We can calculate the semi-deviation of MSFT daily returns using the function **`SemiDeviation`**.
+
+```{r semid msft}
+MSFT_semidev <- PerformanceAnalytics::SemiDeviation(MSFT_returns)
+
+MSFT_semidev
+```
+
+By using the semi-deviaion as a measure of risk, MSFT now has lower risk than if we had used the standard deviation (0.011 < 0.016). However, we are unable to use semi-deviation to determine the range of values that the daily returns would fall under a given probability, as we did using the standard deviation.
+
+### 3.3 Downside Deviation
+
+The downside deviation is similar to the semi-deviation, but it measures deviations below a target return (called the Minimum Acceptable Return or MAR). The formula is written as:
+
+$$
+DD = \sqrt{\sum_{n=1}^N \frac{\min(R_n - \text{MAR}, 0)^2}{N}} ~, \text{where N = total number of observations}
+$$
+
+Common values of MAR include the risk-free rate or zero, and if the mean of the returns is used, we would calculate the semi-deviation. Throughout this project, the MAR that I would use is 3%, which is approximately the yearly inflation rate.
+
+```{r dd msft}
+MSFT_downdev <- PerformanceAnalytics::DownsideDeviation(MSFT_returns, MAR = 0.03/252) # divide by 252 to change to daily periodicity
+
+MSFT_downdev
+```
+
+Because the MAR is lesser than the expected MSFT daily return, we should obtain a smaller DD value than the semi-deviation. The DD might be a better measure of risk than the semi-deviation since the expected return may not be a good measure of the MAR.
+
+### 3.4 Value-at-Risk
+
+VaR measures the amount of loss that could occur over a specific time period, given a confidence level. For example, a 95% VaR of \$1 million with a time period of 1 month means that we are 95% confident that the loss would not exceed \$1 million. We can also rephrase it as we are 5% confident that the loss is greater than \$1 million over 1 month. The plot shows how VaR is indicated on a distribution of returns (chart has been zoomed in to allow better visualization):
+
+```{r plot VaR}
+PerformanceAnalytics::chart.Histogram(MSFT_returns, 
+                                      main = "Distribution of MSFT Daily Returns with VaR",
+                                      methods = c("add.risk"), # Indicate to show VaR and Modified VaR
+                                      xlim = c(-0.05, 0.05)) # Zoom in chart
+```
+
+There are generally three basic measures of VaR, namely the Historical VaR (HVaR), Parametric VaR (PVaR) and Modified VaR. 
+
+For 95% HVaR, we determine the value of actual return distribution at the 5% probability. As it uses the historical returns to calculate the VaR, HVaR does not make any assumptions about the distribution of returns.
+
+```{r HVaR msft}
+MSFT_hvar <- PerformanceAnalytics::VaR(MSFT_returns,
+                                       p = 0.95, # confidence level of 95%
+                                       method = "historical") # use historical VaR
+
+MSFT_hvar
+```
+
+Based on the HVaR, we are 95% confident that the daily loss would not exceed 0.024 (or 2.4%). The statements "We are 95% confident that MSFT daily gain will be at least -0.024" and "We are 5% confident that MSFT daily loss would exceed 0.024" are equivalent.
+
+For 95% PVaR, we also determine the value of the return distribution at 5% probability, but we assume that the returns are normally distributed. PVaR is also known as the variance-covariance VaR.
+
+```{r PVaR msft}
+MSFT_pvar <- PerformanceAnalytics::VaR(MSFT_returns,
+                                       p = 0.95, 
+                                       method = "gaussian") # gaussian (normal) distribution
+
+MSFT_pvar
+```
+
+Based on the PVaR, we are 95% confident that the daily loss in MSFT would not exceed 0.025.
+
+Modified VaR (also called Cornish-Fisher VaR) accounts for the skewness and kurtosis of the return distribution, which should be preferred when returns are not normally distributed.
+
+```{r modVaR msft}
+MSFT_modvar <- PerformanceAnalytics::VaR(MSFT_returns, 
+                                         p = 0.95, 
+                                         method = "modified") # use modified VaR
+
+MSFT_modvar
+```
+
+Based on the Modified VaR, we are 95% confident that the daily loss in MSFT would not exceed 0.022.
+
+While VaR allows us to determine the amount of loss that could occur within a time period at a given confidence interval, it does not actually quantify the loss that could occur beyond the VaR.
+
+### 3.5 Conditional Value-at-Risk
+
+CVaR, also known as the expected shortfall (ES) or expected tail loss (ETL) measures the loss occurring beyond the VaR. Similar to VaR, the calculation of CVaR can be based on the historical, parametric, or modified methods. In the **`PerformanceAnalytics`** package, the functions **`CVaR`**, **`ES`** and **`ETL`** are equivalent. For a 95% CVaR, we calculate the average of the 5% tail loss. 
+
+```{r historical CVaR msft}
+MSFT_histcvar <- PerformanceAnalytics::CVaR(MSFT_returns, 
+                                            p = 0.95, 
+                                            method = "historical")
+
+MSFT_histcvar
+```
+
+Based on the historical method of CVaR, the average loss in the 5% tail of the return distribution is 0.036 or 3.6%.
+
+```{r parametric CVaR msft}
+MSFT_parcvar <- PerformanceAnalytics::CVaR(MSFT_returns,
+                                           p = 0.95, 
+                                           method = "gaussian")
+
+MSFT_parcvar
+```
+
+Based on the parametric CVaR, the average loss in the 5% tail of the return distribution is 0.032. We can see that the loss is less than the historical CVaR although PVaR \< HVaR, which may be due to the false assumption of normality of the return distribution (not properly accounting for the tail).
+
+```{r modified CVaR msft}
+MSFT_modcvar <- PerformanceAnalytics::CVaR(MSFT_returns, 
+                                           p = 0.95, 
+                                           method = "modified")
+
+MSFT_modcvar
+```
+
+Based on the modified CVaR, the average loss in the 5% tail of the return distribution is 0.031.
+
+### 3.6 Summary of Risk Measures
+
+In this section, we have seen the different variations of risk measures, with the standard deviation, semi-deviation and downside deviation measuring fluctuations of returns around or below a specified value and VaR and CVaR measuring the tail losses.
+
+Here are the values of the risk measures calculated in this section, summarized into two categories:
+
+```{r summary of risk measures}
+c(Std_Dev = MSFT_stddev, Semi_Dev = MSFT_semidev, Downside_Dev = MSFT_downdev)
+
+c(H_VaR = MSFT_hvar, P_VaR = MSFT_pvar, Mod_VaR = MSFT_modvar,
+  H_CVaR = MSFT_histcvar, P_CVaR = MSFT_parcvar, Mod_CVaR = MSFT_modcvar)
+```
+
+For the VaR and CVaR calculations, it is assumed that historical values can determine future patterns of returns since we are using the actual historical data. There is another method that is widely used involving Monte Carlo simulations to simulate the returns for more predictive patterns of VaR and CVaR. However, I would not discuss this here as there are no existing packages or functions for Monte Carlo VaR and CVaR, and would require the coding of the MC simulation manually.
+
+## 4 Retrieving Data For Portfolio
+
+In this section, we start applying the different risk measures into the portfolio optimization problem. I have chosen to use index funds that represents stock indices of different major economies:
+
+* US Large-Cap Equities: iShares Core S&P 500 ETF (IVV)
+* US Small-Cap Equities: iShares Russell 2000 ETF (IWM)
+* Europe Equities: Vanguard FTSE Europe ETF (VGK)
+* Japan Equities: iShares MSCI Japan ETF (EWJ)
+* Emerging Market Equities: Vanguard FTSE Emerging Markets ETF (VWO)
+
+I have retrieved the historical price data of each ETF, keeping only the adjusted price column. I have used the same start and end date for data retrieval as Section 3.
+
+```{r portfolio price data}
+tickers <- c("IVV", "IWM", "VGK", "EWJ", "VWO")
+
+price_data <- NULL
+
+for (ticker in tickers) {
+  price_data <- cbind(price_data,
+                      quantmod::getSymbols(ticker, 
+                                           src = "yahoo", 
+                                           from = startdate, to = enddate, 
+                                           periodicity = "daily", 
+                                           auto.assign = F)[,6])
+}
+
+colnames(price_data) <- tickers
+```
+
+Let us take a look at the `price_data` object we have created to make sure that the data is correctly retrieved.
+
+```{r head tail of price data}
+head(price_data, n = 4); tail(price_data, n = 4)
+
+nrow(price_data)
+
+colSums(is.na(price_data))
+```
+
+We have a total of 3124 observations per security and there are no NA values in the columns. Now that we have ensured the price data is in time order and there are no missing values, we can calculate the daily returns of each security.
+
+```{r individual security return}
+returns <- na.omit(PerformanceAnalytics::Return.calculate(price_data, method = "discrete"))
+
+head(returns)
+
+nrow(returns)
+```
+
+With the `returns` data, we can proceed with optimizing the portfolios based on different risk measures. I created portfolios that minimizes the different risk measures in Section 5 and optimal portfolios that minimizes risk for a given level of return in Section 6.
+
+## 5 Minimum Risk Portfolios
+
+
+
+
+
+
 
 
 
@@ -126,6 +328,14 @@ PerformanceAnalytics::skewness(MSFT_returns, method = "sample"); PerformanceAnal
 
 
 ## References
+
+<https://analystprep.com/study-notes/frm/part-1/valuation-and-risk-management/measures-of-financial-risk/>
+
+<https://corporatefinanceinstitute.com/resources/knowledge/trading-investing/value-at-risk-var/>
+
+<https://www.financialplanningassociation.org/article/journal/JUN13-intuitive-examination-downside-risk>
+
+<https://www.investopedia.com/terms/s/semideviation.asp>
 
 <https://pages.stern.nyu.edu/~adamodar/pdfiles/valrisk/ch4.pdf>
 
