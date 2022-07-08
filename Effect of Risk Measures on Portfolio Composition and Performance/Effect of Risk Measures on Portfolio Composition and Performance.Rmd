@@ -25,9 +25,7 @@ The results in this project should not be taken as investment advice, and is not
 
 ```{r load packages, message=FALSE, warning=FALSE}
 library(dplyr)
-library(ROI) # For portfolio optimization (needed for semi-deviation optimization)
-library(ROI.plugin.glpk) # Part of ROI solver
-library(ROI.plugin.quadprog) # Part of ROI solver
+library(doParallel) # For parallel computation in foreach loops
 library(PerformanceAnalytics) # For portfolio performance and risk analysis
 library(PortfolioAnalytics) # For portfolio optimization and analysis
 library(quantmod) # For obtaining historical prices from Yahoo Finance
@@ -137,7 +135,7 @@ Because the MAR is lesser than the expected MSFT daily return, we should obtain 
 
 VaR measures the amount of loss that could occur over a specific time period, given a confidence level. For example, a 95% VaR of \$1 million with a time period of 1 month means that we are 95% confident that the loss would not exceed \$1 million. We can also rephrase it as we are 5% confident that the loss is greater than \$1 million over 1 month. The plot shows how VaR is indicated on a distribution of returns (chart has been zoomed in to allow better visualization):
 
-```{r plot VaR}
+```{r plot VaR, fig.align='center'}
 PerformanceAnalytics::chart.Histogram(MSFT_returns, 
                                       main = "Distribution of MSFT Daily Returns with VaR",
                                       methods = c("add.risk"), # Indicate to show VaR and Modified VaR
@@ -286,6 +284,248 @@ With the `returns` data, we can proceed with optimizing the portfolios based on 
 
 ## 5 Minimum Risk Portfolios
 
+In this section, I would start by creating the minimum variance portfolio, followed by portfolios with minimum semi-variance, downside deviation, VaR and CVaR. The creation of these portfolios require the package **`PortfolioAnalytics`**. 
+
+Before proceeding with the creation of portfolio objectives to minimize risk, I have created an initial portfolio specification with common constraints. It includes a sum of weight and individual asset weight constraints, which can be used throughout the different portfolio optimization problems.
+
+```{r initial portfolio spec}
+init_spec <- PortfolioAnalytics::portfolio.spec(assets = colnames(returns))
+
+# Sum of weights constrained to 1 but require some "wiggle" room for random portfolio generation
+init_spec <- add.constraint(portfolio = init_spec, 
+                            type = "weight_sum", 
+                            min_sum = 0.99, max_sum = 1.01)
+
+# Weight of each asset is constrained to min of 0 and max of 40% of portfolio
+init_spec <- add.constraint(portfolio = init_spec, 
+                            type = "box", 
+                            min = 0, max = 0.40)
+```
+
+While the `ROI` solver can be used with var/StdDev and ETL/ES/CVaR risk objectives, it cannot be used with VaR and other downside risk measures. As such, I have opted to use the random portfolios method for optimization. The number of permutations of random portfolios satisfying the portfolio constraints and objectives may be a problem if a small number of permutation is chosen, and may not allow for satisfactory comparison across portfolios. To run a very large number of permutations require time and computing power.
+
+Create random portfolios satisfying the above constraints:
+
+```{r random portfolios}
+set.seed(1009)
+
+randport <- random_portfolios(portfolio = init_spec, 
+                              permutations = 15000, 
+                              rp_method = "sample")
+
+dim(randport) # 14999 random portfolios found
+```
+
+With the random portfolios, I created a foreach loop to find the daily returns of each random portfolio in `randport`. To speed things up, I ran the **`foreach`** loop in parallel.
+
+Calculate portfolio returns of every weight composition in `randport`:
+
+```{r random portfolios returns, warning=FALSE, message=FALSE}
+start_loop <- proc.time()
+
+# Important to make sure that we do not use all cores for computation. Check with detectCores(logical = F)
+mycluster <- makeCluster(6) # Number of cores to use. I have 8, but may not be suitable for everyone.
+
+registerDoParallel(mycluster) # Register parallel computing
+
+output1 <- foreach(i = 1:nrow(randport), .combine = "cbind") %dopar% {
+  
+  rp_return <- PerformanceAnalytics::Return.portfolio(R = returns, 
+                                                      weights = randport[i,], 
+                                                      geometric = T, 
+                                                      rebalance_on = "quarters")
+  
+  }
+
+stopCluster(mycluster) # End parallel computing
+
+total_time <- proc.time() - start_loop
+
+total_time
+
+dim(output1)
+```
+
+We can see that there are 3123 rows and 14999 columns, corresponding to number of observations in `returns` and number of random portfolios in `randport` respectively. The `total_time` shows the time taken to calculate the 14,999 random portfolio returns. The time elapsed was about 580 seconds for the loop.
+
+### 5.1 Minimum Variance Portfolio
+
+With the daily returns of every random portfolio in `output1`, we can calculate the standard deviation and find the minimum to obtain the minimum variance portfolio.
+
+Optimize portfolio based on minimum variance:
+
+```{r minimize standard deviation}
+stddev_search <- PerformanceAnalytics::StdDev(R = output1, portfolio_method = "single")
+
+min(stddev_search)
+
+weight_MinVar <- randport[which.min(stddev_search),]
+
+weight_MinVar
+```
+
+### 5.2 Minimum Semi-Deviation Portfolio
+
+Optimize portfolio based on minimum semi-deviation:
+
+```{r minimize semi-deviation}
+semidev_search <- PerformanceAnalytics::SemiDeviation(R = output1)
+
+min(semidev_search)
+
+weight_MinSemiDev <- randport[which.min(semidev_search),]
+
+weight_MinSemiDev
+```
+
+### 5.3 Minimum Downside Deviation Portfolio
+
+Optimize portfolio based on minimum downside deviation:
+
+```{r minimize downside deviation}
+downdev_search <- PerformanceAnalytics::DownsideDeviation(R = output1, MAR = 0.03/252)
+
+min(downdev_search)
+
+weight_MinDD <- randport[which.min(downdev_search),]
+
+weight_MinDD
+```
+
+### 5.4 Minimum Value-at-Risk Portfolio
+
+For VaR, I would use the historical VaR, although one could experiment with other VaR methods. Since the VaR measure is negative, we want to find the highest negative measure (i.e. closer to or more than 0). If VaR was framed as a positive measure, we would simply minimize the VaR.
+
+Optimize portfolio based on minimum historical VaR:
+
+```{r optimize min_var portfolio}
+hvar_search <- PerformanceAnalytics::VaR(R = output1, p = 0.95, method = "historical")
+
+max(hvar_search)
+
+weight_MinHVaR <- randport[which.max(hvar_search),]
+
+weight_MinHVaR
+```
+
+### 5.5 Minimum Conditional Value-at-Risk Portfolio
+
+Similar to the VaR portfolio optimization, I would use the historical CVaR.
+
+Optimize portfolio based on minimum historical CVaR:
+
+```{r optimize min_var portfolio}
+hcvar_search <- PerformanceAnalytics::CVaR(R = output1, p = 0.95, method = "historical")
+
+max(hcvar_search)
+
+weight_MinHCVaR <- randport[which.max(hcvar_search),]
+
+weight_MinHCVaR
+``` 
+
+### 5.6 Summary of Minimum Risk Portfolios
+
+Now that we have created the different portfolios by minimizing different risk measures, we can compare the weights of their components, their performance and chart their cumulative returns.
+
+```{r weights of minimum risk portfolios}
+port_weights <- rbind(Min_Var = weight_MinVar, 
+                      Min_SemiDev = weight_MinSemiDev, 
+                      Min_DownDev = weight_MinDD, 
+                      Min_HVaR = weight_MinHVaR, 
+                      Min_HCVaR = weight_MinHCVaR)
+
+port_weights
+```
+
+Weights of `Min_Var` and `Min_DownDev` portfolios are equal, which would yield equal cumulative returns and performance metrics.
+
+Since we have calculated the daily returns of each portfolio in `output1`, we can extract it and save it into a suitable data frame.
+
+```{r extract daily returns of portfolios}
+return_comp <- cbind(output1[, which.min(stddev_search)],
+                     output1[, which.min(semidev_search)],
+                     output1[, which.min(downdev_search)],
+                     output1[, which.max(hvar_search)],
+                     output1[, which.max(hcvar_search)]) %>%
+  `colnames<-`(c("Min_Var", "Min_SemiDev", "Min_DownDev", "Min_HVaR", "Min_HCVaR"))
+
+head(return_comp)
+```
+
+An appropriate benchmark would be needed if we wish to properly compare the performance of our portfolios. I am using the Vanguard Total World Stock ETF as a benchmark, which consists of global equities, although a large amount of the funds is invested in North America.
+
+```{r benchmark return}
+benchmark <- quantmod::getSymbols(Symbols = "VT",
+                                  src = "yahoo", 
+                                  from = startdate, to = enddate, 
+                                  periodicity = "daily", 
+                                  auto.assign = F)[,6]
+
+benchmark_return <- na.omit(PerformanceAnalytics::Return.calculate(prices = benchmark, method = "discrete"))
+
+head(benchmark_return); dim(benchmark_return)
+```
+
+After compiling the returns, we can plot their cumulative returns using **`chart.CumReturns`** and compare their drawdowns by using 
+
+```{r plot performance chart of minimum risk portfolios, fig.align='center'}
+PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
+                                       geometric = T, # Use geometric returns since we have arithmetic returns
+                                       legend.loc = "topleft",
+                                       main = "Cumulative Returns of Minimum Risk Portfolios")
+
+PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
+                                     geometric = T,
+                                     legend.loc = "bottomleft",
+                                     main = "Drawdown of Minimum Risk Portfolios")
+```
+
+Since the `Min_Var` and `Min_DownDev` portfolios have the same weights, they overlapped one another on the charts and we can only see the `Min_Var` cumulative returns and drawdown charts. The `Min_Var` and `Min_DownDev` portfolios performed similarly to the benchmark in cumulative returns. The `Min_SemiDev`, `Min_HVaR` and `Min_HCVaR` portfolios have lesser cumulative returns. The benchmark has generally higher drawdowns than the minimum risk portfolios.
+
+```{r stats and annualized metrics of minimum risk portfolios}
+table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 252, Rf = 0.02/252, geometric = T, digits = 4)
+
+table.Stats(R = cbind(return_comp, benchmark_return), digits = 4)
+
+table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 252, Rf = 0.02/252, digits = 4)
+
+table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 252, Rf = 0.02/252, MAR = 0.03/252, digits = 4)
+```
+
+## 6 Optimal Portfolio Selection With Target Return
+
+In this section, I optimized portfolios based on a target return of 20% annually. Since we have generated random portfolios in Section 5, I used that to determine the subset of portfolios that meets the target return requirement. Reason for doing this is that the permutations of random portfolios in Section 5 is not the entire sample that meets the weight sum and box constraints. Unless we use a different seed, the newly generated random portfolios with target return constraint will likely be the same as in Section 5 due to the limited permutations.
+
+Since the target return is 20% annually, I calculated the average annualized return and subset the portfolios that meet the constraint.
+
+```{r subset of randport with target return}
+mycluster <- makeCluster(6)
+
+registerDoParallel(mycluster)
+
+rp_annreturn <- foreach(i = 1:ncol(output1), .combine = "rbind") %dopar% {
+  
+  PerformanceAnalytics::Return.annualized(R = output1[, i], scale = 252, geometric = T)
+  
+  }
+
+stopCluster(mycluster)
+
+subrp_return <- rp_annreturn > 0.08 # relaxing the constraints a little to capture sufficient portfolios
+```
+
+```{r}
+meanrisk_spec <- add.constraint(portfolio = init_spec, type = "return", return_target = 0.2/252)
+
+set.seed(10)
+
+randport2 <- random_portfolios(portfolio = meanrisk_spec, 
+                               permutations = 15000, 
+                               rp_method = "sample")
+
+dim(randport2)
+```
 
 
 
@@ -298,7 +538,27 @@ With the `returns` data, we can proceed with optimizing the portfolios based on 
 
 
 
+```{r}
+meanvar_search <- PerformanceAnalytics::StdDev(R = output2, portfolio_method = "single")
 
+min(meanvar_search)
+
+weight_MeanVar <- randport2[which.min(meanvar_search), ]
+
+weight_MeanVar
+```
+
+
+
+```{r}
+test_spec <- add.objective(portfolio = meanrisk_spec, type = "return", name = "mean")
+
+test_spec <- add.objective(portfolio = test_spec, type = "risk", name = "var")
+
+registerDoSEQ()
+
+optimize.portfolio(R = returns, portfolio = meanrisk_spec, optimize_method = "random", search_size = 40000)
+```
 
 
 
