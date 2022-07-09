@@ -45,7 +45,7 @@ MSFT <- quantmod::getSymbols(Symbols = "MSFT", # Indicate a symbol that correspo
                              src = "yahoo", # Indicate to search stock prices from Yahoo Finance
                              from = startdate, # Indicate a start date
                              to = enddate, # Indicate an end date
-                             periodicity = "daily", # Indicate the periodicity of prices to retrieve, can also be "weekly" or "monthly"
+                             periodicity = "monthly", # Indicate the periodicity of prices to retrieve, can also be "daily" or "weekly"
                              auto.assign = F) # Indicate FALSE so that results are assigned to variable we indicate
 
 head(MSFT, n = 4); tail(MSFT, n = 4)
@@ -53,7 +53,7 @@ head(MSFT, n = 4); tail(MSFT, n = 4)
 colSums(is.na(MSFT)) # To check for NA values
 ```
 
-The adjusted price would be used to calculate the daily return since it has been adjusted for dividend and splits.
+The adjusted price would be used to calculate the monthly return since it has been adjusted for dividend and splits.
 
 ```{r msft returns}
 MSFT_returns <- PerformanceAnalytics::Return.calculate(prices = MSFT[,6], # Use the 6th column of MSFT (Adjusted Price)
@@ -79,11 +79,11 @@ MSFT_stddev <- PerformanceAnalytics::StdDev(R = MSFT_returns)
 MSFT_stddev
 ```
 
-The value of 0.016 means that 68% of the expected daily return would range between the mean return $\pm$ 0.016 (1 sd).
+The value of 0.062 means that 68% of the expected monthly return would range between the mean return $\pm$ 0.062 (1 sd).
 
 However, the variance and standard deviation as a measure of risk are typically countered by two arguments. Firstly, it assumes that returns are normally distributed, which is usually not satisfied when dealing with financial returns. Secondly, it penalizes downside and upside risks equally, but investors are usually more concerned with downside risks than upside risks. In optimizing portfolio composition, the Mean-Variance Framework limits not just the losses, but also the gains. Therefore, different measures of risk have been developed to capture the left side of the distribution instead.
 
-```{r distribution of msft returns}
+```{r distribution of msft returns, fig.align='center'}
 PerformanceAnalytics::chart.Histogram(MSFT_returns, 
                                       main = "Distribution of MSFT Daily Returns",
                                       methods = c("add.density", "add.normal"))
@@ -93,7 +93,7 @@ PerformanceAnalytics::skewness(MSFT_returns, method = "sample")
 PerformanceAnalytics::kurtosis(MSFT_returns, method = "sample")
 ```
 
-The daily return distribution of MSFT is slightly positively skewed, and has very high kurtosis (normal distribution has kurtosis of 3). Majority of the daily returns are concentrated around the mean as can be seen in the chart, but there are very long-tails, meaning that there can be extremely large daily losses or gains. Hence, the daily returns of MSFT are not normally distributed (can be confirmed with a formal test, such as Jarque-Bera or Shapiro-Wilks Test).
+The daily return distribution of MSFT is slightly positively skewed, and has a higher kurtosis of 3.54 than the normal distribution of 3. Majority of the daily returns are concentrated around the mean as can be seen in the chart, but the tails are fatter, meaning that there can be extremely large monthly losses or gains. Hence, the monthly returns of MSFT may not normally distributed (can be confirmed with a formal test, such as Jarque-Bera or Shapiro-Wilks Test).
 
 ### 3.2 Semi-Variance and Semi-Deviation
 
@@ -111,7 +111,7 @@ MSFT_semidev <- PerformanceAnalytics::SemiDeviation(MSFT_returns)
 MSFT_semidev
 ```
 
-By using the semi-deviaion as a measure of risk, MSFT now has lower risk than if we had used the standard deviation (0.011 < 0.016). However, we are unable to use semi-deviation to determine the range of values that the daily returns would fall under a given probability, as we did using the standard deviation.
+By using the semi-deviaion as a measure of risk, MSFT now has lower risk than if we had used the standard deviation (0.043 < 0.062). However, we are unable to use semi-deviation to determine the range of values that the daily returns would fall under a given probability, as we did using the standard deviation.
 
 ### 3.3 Downside Deviation
 
@@ -124,7 +124,7 @@ $$
 Common values of MAR include the risk-free rate or zero, and if the mean of the returns is used, we would calculate the semi-deviation. Throughout this project, the MAR that I would use is 3%, which is approximately the yearly inflation rate.
 
 ```{r dd msft}
-MSFT_downdev <- PerformanceAnalytics::DownsideDeviation(MSFT_returns, MAR = 0.03/252) # divide by 252 to change to daily periodicity
+MSFT_downdev <- PerformanceAnalytics::DownsideDeviation(MSFT_returns, MAR = 0.03/12) # divide by 252 to change to daily periodicity
 
 MSFT_downdev
 ```
@@ -133,13 +133,12 @@ Because the MAR is lesser than the expected MSFT daily return, we should obtain 
 
 ### 3.4 Value-at-Risk
 
-VaR measures the amount of loss that could occur over a specific time period, given a confidence level. For example, a 95% VaR of \$1 million with a time period of 1 month means that we are 95% confident that the loss would not exceed \$1 million. We can also rephrase it as we are 5% confident that the loss is greater than \$1 million over 1 month. The plot shows how VaR is indicated on a distribution of returns (chart has been zoomed in to allow better visualization):
+VaR measures the amount of loss that could occur over a specific time period, given a confidence level. For example, a 95% VaR of \$1 million with a time period of 1 month means that we are 95% confident that the loss would not exceed \$1 million. We can also rephrase it as we are 5% confident that the loss is greater than \$1 million over 1 month. The plot shows how VaR is indicated on a distribution of returns:
 
 ```{r plot VaR, fig.align='center'}
 PerformanceAnalytics::chart.Histogram(MSFT_returns, 
-                                      main = "Distribution of MSFT Daily Returns with VaR",
-                                      methods = c("add.risk"), # Indicate to show VaR and Modified VaR
-                                      xlim = c(-0.05, 0.05)) # Zoom in chart
+                                      main = "Distribution of MSFT Monthly Returns with VaR",
+                                      methods = c("add.risk")) # Indicate to show VaR and Modified VaR
 ```
 
 There are generally three basic measures of VaR, namely the Historical VaR (HVaR), Parametric VaR (PVaR) and Modified VaR. 
@@ -154,7 +153,7 @@ MSFT_hvar <- PerformanceAnalytics::VaR(MSFT_returns,
 MSFT_hvar
 ```
 
-Based on the HVaR, we are 95% confident that the daily loss would not exceed 0.024 (or 2.4%). The statements "We are 95% confident that MSFT daily gain will be at least -0.024" and "We are 5% confident that MSFT daily loss would exceed 0.024" are equivalent.
+Based on the HVaR, we are 95% confident that the monthly loss would not exceed 0.079 (or 7.9%). The statements "We are 95% confident that MSFT daily gain will be at least -0.079" and "We are 5% confident that MSFT monthly loss would exceed 0.079" are equivalent.
 
 For 95% PVaR, we also determine the value of the return distribution at 5% probability, but we assume that the returns are normally distributed. PVaR is also known as the variance-covariance VaR.
 
@@ -166,7 +165,7 @@ MSFT_pvar <- PerformanceAnalytics::VaR(MSFT_returns,
 MSFT_pvar
 ```
 
-Based on the PVaR, we are 95% confident that the daily loss in MSFT would not exceed 0.025.
+Based on the PVaR, we are 95% confident that the monthly loss in MSFT would not exceed 0.082.
 
 Modified VaR (also called Cornish-Fisher VaR) accounts for the skewness and kurtosis of the return distribution, which should be preferred when returns are not normally distributed.
 
@@ -178,7 +177,7 @@ MSFT_modvar <- PerformanceAnalytics::VaR(MSFT_returns,
 MSFT_modvar
 ```
 
-Based on the Modified VaR, we are 95% confident that the daily loss in MSFT would not exceed 0.022.
+Based on the Modified VaR, we are 95% confident that the monthly loss in MSFT would not exceed 0.080.
 
 While VaR allows us to determine the amount of loss that could occur within a time period at a given confidence interval, it does not actually quantify the loss that could occur beyond the VaR.
 
@@ -194,7 +193,7 @@ MSFT_histcvar <- PerformanceAnalytics::CVaR(MSFT_returns,
 MSFT_histcvar
 ```
 
-Based on the historical method of CVaR, the average loss in the 5% tail of the return distribution is 0.036 or 3.6%.
+Based on the historical method of CVaR, the average loss in the 5% tail of the return distribution is 0.106 or 10.6%.
 
 ```{r parametric CVaR msft}
 MSFT_parcvar <- PerformanceAnalytics::CVaR(MSFT_returns,
@@ -204,7 +203,7 @@ MSFT_parcvar <- PerformanceAnalytics::CVaR(MSFT_returns,
 MSFT_parcvar
 ```
 
-Based on the parametric CVaR, the average loss in the 5% tail of the return distribution is 0.032. We can see that the loss is less than the historical CVaR although PVaR \< HVaR, which may be due to the false assumption of normality of the return distribution (not properly accounting for the tail).
+Based on the parametric CVaR, the average loss in the 5% tail of the return distribution is 0.108.
 
 ```{r modified CVaR msft}
 MSFT_modcvar <- PerformanceAnalytics::CVaR(MSFT_returns, 
@@ -214,7 +213,7 @@ MSFT_modcvar <- PerformanceAnalytics::CVaR(MSFT_returns,
 MSFT_modcvar
 ```
 
-Based on the modified CVaR, the average loss in the 5% tail of the return distribution is 0.031.
+Based on the modified CVaR, the average loss in the 5% tail of the return distribution is 0.108.
 
 ### 3.6 Summary of Risk Measures
 
@@ -229,22 +228,27 @@ c(H_VaR = MSFT_hvar, P_VaR = MSFT_pvar, Mod_VaR = MSFT_modvar,
   H_CVaR = MSFT_histcvar, P_CVaR = MSFT_parcvar, Mod_CVaR = MSFT_modcvar)
 ```
 
-For the VaR and CVaR calculations, it is assumed that historical values can determine future patterns of returns since we are using the actual historical data. There is another method that is widely used involving Monte Carlo simulations to simulate the returns for more predictive patterns of VaR and CVaR. However, I would not discuss this here as there are no existing packages or functions for Monte Carlo VaR and CVaR, and would require the coding of the MC simulation manually.
+For the VaR and CVaR calculations, it is assumed that historical values can determine future patterns of returns since we are using the actual historical data. Hence, VaR and CVaR have been countered by arguments of its viability on future data and events.
 
 ## 4 Retrieving Data For Portfolio
 
-In this section, we start applying the different risk measures into the portfolio optimization problem. I have chosen to use index funds that represents stock indices of different major economies:
+In this section, we start applying the different risk measures into the portfolio optimization problem. I have randomly chosen a few large-cap stocks listed in the U.S. for the portfolio optimization:
 
-* US Large-Cap Equities: iShares Core S&P 500 ETF (IVV)
-* US Small-Cap Equities: iShares Russell 2000 ETF (IWM)
-* Europe Equities: Vanguard FTSE Europe ETF (VGK)
-* Japan Equities: iShares MSCI Japan ETF (EWJ)
-* Emerging Market Equities: Vanguard FTSE Emerging Markets ETF (VWO)
+* Apple Inc (AAPL)
+* Microsoft Corp. (MSFT)
+* Johnson & Johnson (JNJ)
+* Procter & Gamble (PG)
+* Mastercard Incorporated (MA)
+* Home Depot, Inc. (HD)
+* Pfizer, Inc. (PFE)
+* Merck & Company, Inc. (MRK)
+* Costco Wholesale Corporation (COST)
+* NVIDIA Corporation (NVDA)
 
-I have retrieved the historical price data of each ETF, keeping only the adjusted price column. I have used the same start and end date for data retrieval as Section 3.
+I have retrieved the historical price data of each ETF, keeping only the adjusted price column. I have used the same start and end date for data retrieval as Section 3, but chose a monthly periodicity.
 
 ```{r portfolio price data}
-tickers <- c("IVV", "IWM", "VGK", "EWJ", "VWO")
+tickers <- c("AAPL", "MSFT", "JNJ", "PG", "MA", "HD", "PFE", "MRK", "COST", "NVDA")
 
 price_data <- NULL
 
@@ -253,7 +257,7 @@ for (ticker in tickers) {
                       quantmod::getSymbols(ticker, 
                                            src = "yahoo", 
                                            from = startdate, to = enddate, 
-                                           periodicity = "daily", 
+                                           periodicity = "monthly", 
                                            auto.assign = F)[,6])
 }
 
@@ -270,7 +274,7 @@ nrow(price_data)
 colSums(is.na(price_data))
 ```
 
-We have a total of 3124 observations per security and there are no NA values in the columns. Now that we have ensured the price data is in time order and there are no missing values, we can calculate the daily returns of each security.
+We have a total of 149 monthly observations per security and there are no NA values in the columns. Now that we have ensured the price data is in time order and there are no missing values, we can calculate the monthly returns of each security.
 
 ```{r individual security return}
 returns <- na.omit(PerformanceAnalytics::Return.calculate(price_data, method = "discrete"))
@@ -294,12 +298,12 @@ init_spec <- PortfolioAnalytics::portfolio.spec(assets = colnames(returns))
 # Sum of weights constrained to 1 but require some "wiggle" room for random portfolio generation
 init_spec <- add.constraint(portfolio = init_spec, 
                             type = "weight_sum", 
-                            min_sum = 0.99, max_sum = 1.01)
+                            min_sum = .99, max_sum = 1.01)
 
-# Weight of each asset is constrained to min of 0 and max of 40% of portfolio
+# Weight of each asset is constrained to min of 0 and max of 20% of portfolio
 init_spec <- add.constraint(portfolio = init_spec, 
                             type = "box", 
-                            min = 0, max = 0.40)
+                            min = 0, max = 0.20)
 ```
 
 While the `ROI` solver can be used with var/StdDev and ETL/ES/CVaR risk objectives, it cannot be used with VaR and other downside risk measures. As such, I have opted to use the random portfolios method for optimization. The number of permutations of random portfolios satisfying the portfolio constraints and objectives may be a problem if a small number of permutation is chosen, and may not allow for satisfactory comparison across portfolios. To run a very large number of permutations require time and computing power.
@@ -307,50 +311,49 @@ While the `ROI` solver can be used with var/StdDev and ETL/ES/CVaR risk objectiv
 Create random portfolios satisfying the above constraints:
 
 ```{r random portfolios}
-set.seed(1009)
+set.seed(1)
 
 randport <- random_portfolios(portfolio = init_spec, 
-                              permutations = 15000, 
-                              rp_method = "sample")
+                              permutations = 25000, 
+                              rp_method = "sample",
+                              eliminate = T) # Eliminate portfolios that do not meet requirements
 
-dim(randport) # 14999 random portfolios found
+dim(randport) # 24999 random portfolios found
 ```
 
-With the random portfolios, I created a foreach loop to find the daily returns of each random portfolio in `randport`. To speed things up, I ran the **`foreach`** loop in parallel.
+With the random portfolios, I created a foreach loop to find the monhtly returns of each random portfolio in `randport`. To speed things up, I ran the **`foreach`** loop in parallel using **`dopar`**.
 
 Calculate portfolio returns of every weight composition in `randport`:
 
 ```{r random portfolios returns, warning=FALSE, message=FALSE}
-start_loop <- proc.time()
-
 # Important to make sure that we do not use all cores for computation. Check with detectCores(logical = F)
 mycluster <- makeCluster(6) # Number of cores to use. I have 8, but may not be suitable for everyone.
 
 registerDoParallel(mycluster) # Register parallel computing
 
+total_time <- system.time(
 output1 <- foreach(i = 1:nrow(randport), .combine = "cbind") %dopar% {
   
   rp_return <- PerformanceAnalytics::Return.portfolio(R = returns, 
                                                       weights = randport[i,], 
-                                                      geometric = T, 
+                                                      geometric = F, # based on portfolio theory, return of portfolio is simple sum of weighted return of individual assets
                                                       rebalance_on = "quarters")
   
   }
+) # system.time to measure time take to run the loop
 
 stopCluster(mycluster) # End parallel computing
-
-total_time <- proc.time() - start_loop
 
 total_time
 
 dim(output1)
 ```
 
-We can see that there are 3123 rows and 14999 columns, corresponding to number of observations in `returns` and number of random portfolios in `randport` respectively. The `total_time` shows the time taken to calculate the 14,999 random portfolio returns. The time elapsed was about 580 seconds for the loop.
+We can see that there are 148 rows and 24999 columns, corresponding to number of observations in `returns` and number of random portfolios in `randport` respectively. The `total_time` shows the time taken to calculate the 24,999 random portfolio returns. The time elapsed (in seconds) gives us an idea of the amount of time needed to calculate returns of all random portfolios.
 
 ### 5.1 Minimum Variance Portfolio
 
-With the daily returns of every random portfolio in `output1`, we can calculate the standard deviation and find the minimum to obtain the minimum variance portfolio.
+With the monthly returns of every random portfolio in `output1`, we can calculate the standard deviation and find the minimum to obtain the minimum variance portfolio.
 
 Optimize portfolio based on minimum variance:
 
@@ -383,7 +386,7 @@ weight_MinSemiDev
 Optimize portfolio based on minimum downside deviation:
 
 ```{r minimize downside deviation}
-downdev_search <- PerformanceAnalytics::DownsideDeviation(R = output1, MAR = 0.03/252)
+downdev_search <- PerformanceAnalytics::DownsideDeviation(R = output1, MAR = 0.03/12)
 
 min(downdev_search)
 
@@ -398,7 +401,7 @@ For VaR, I would use the historical VaR, although one could experiment with othe
 
 Optimize portfolio based on minimum historical VaR:
 
-```{r optimize min_var portfolio}
+```{r minimize historical VaR}
 hvar_search <- PerformanceAnalytics::VaR(R = output1, p = 0.95, method = "historical")
 
 max(hvar_search)
@@ -414,7 +417,7 @@ Similar to the VaR portfolio optimization, I would use the historical CVaR.
 
 Optimize portfolio based on minimum historical CVaR:
 
-```{r optimize min_var portfolio}
+```{r minimize historical CVaR}
 hcvar_search <- PerformanceAnalytics::CVaR(R = output1, p = 0.95, method = "historical")
 
 max(hcvar_search)
@@ -438,11 +441,11 @@ port_weights <- rbind(Min_Var = weight_MinVar,
 port_weights
 ```
 
-Weights of `Min_Var` and `Min_DownDev` portfolios are equal, which would yield equal cumulative returns and performance metrics.
+Based on the random portfolios generated, `Min_Var` and `Min_SemiDev` portfolios have the same asset weights, which would mean they have the same performance.
 
-Since we have calculated the daily returns of each portfolio in `output1`, we can extract it and save it into a suitable data frame.
+Since we have calculated the monthly returns of each portfolio in `output1`, we can extract it and save it into a suitable data frame.
 
-```{r extract daily returns of portfolios}
+```{r extract monthly returns of min risk portfolios}
 return_comp <- cbind(output1[, which.min(stddev_search)],
                      output1[, which.min(semidev_search)],
                      output1[, which.min(downdev_search)],
@@ -453,14 +456,15 @@ return_comp <- cbind(output1[, which.min(stddev_search)],
 head(return_comp)
 ```
 
-An appropriate benchmark would be needed if we wish to properly compare the performance of our portfolios. I am using the Vanguard Total World Stock ETF as a benchmark, which consists of global equities, although a large amount of the funds is invested in North America.
+An appropriate benchmark would be needed if we wish to properly compare the performance of our portfolios. I am using the SPDR S&P 500 ETF, which tracks U.S. Large-Cap stocks in the S&P 500 Index.
 
 ```{r benchmark return}
-benchmark <- quantmod::getSymbols(Symbols = "VT",
+benchmark <- quantmod::getSymbols(Symbols = "SPY",
                                   src = "yahoo", 
                                   from = startdate, to = enddate, 
-                                  periodicity = "daily", 
-                                  auto.assign = F)[,6]
+                                  periodicity = "monthly", 
+                                  auto.assign = F)[,6] %>%
+  `colnames<-`("SPY")
 
 benchmark_return <- na.omit(PerformanceAnalytics::Return.calculate(prices = benchmark, method = "discrete"))
 
@@ -471,121 +475,180 @@ After compiling the returns, we can plot their cumulative returns using **`chart
 
 ```{r plot performance chart of minimum risk portfolios, fig.align='center'}
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
-                                       geometric = T, # Use geometric returns since we have arithmetic returns
+                                       geometric = T, # Use geometric chaining for portfolio cumulative returns over time
                                        legend.loc = "topleft",
                                        main = "Cumulative Returns of Minimum Risk Portfolios")
 
 PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
                                      geometric = T,
-                                     legend.loc = "bottomleft",
+                                     legend.loc = "bottom",
                                      main = "Drawdown of Minimum Risk Portfolios")
 ```
 
-Since the `Min_Var` and `Min_DownDev` portfolios have the same weights, they overlapped one another on the charts and we can only see the `Min_Var` cumulative returns and drawdown charts. The `Min_Var` and `Min_DownDev` portfolios performed similarly to the benchmark in cumulative returns. The `Min_SemiDev`, `Min_HVaR` and `Min_HCVaR` portfolios have lesser cumulative returns. The benchmark has generally higher drawdowns than the minimum risk portfolios.
+The minimum risk portfolios all had better cumulative returns than the SPY benchmark, with the `Min_HCVAR` and `Min_HVaR` having similar cumulative returns, followed by `Min_DownDev` and `Min_Var`/`Min_SemiDev` portfolios. In general, the SPY benchmark has larger drawdowns than the minimum risk portfolios.
 
 ```{r stats and annualized metrics of minimum risk portfolios}
-table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 252, Rf = 0.02/252, geometric = T, digits = 4)
+table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
 
 table.Stats(R = cbind(return_comp, benchmark_return), digits = 4)
 
-table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 252, Rf = 0.02/252, digits = 4)
+table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 12, Rf = 0.02/12, digits = 4)
 
-table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 252, Rf = 0.02/252, MAR = 0.03/252, digits = 4)
+table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, MAR = 0.03/12, digits = 4)
 ```
 
 ## 6 Optimal Portfolio Selection With Target Return
 
-In this section, I optimized portfolios based on a target return of 20% annually. Since we have generated random portfolios in Section 5, I used that to determine the subset of portfolios that meets the target return requirement. Reason for doing this is that the permutations of random portfolios in Section 5 is not the entire sample that meets the weight sum and box constraints. Unless we use a different seed, the newly generated random portfolios with target return constraint will likely be the same as in Section 5 due to the limited permutations.
+In this section, I optimized portfolios based on a target return of 20% annually. Since we have generated random portfolios in Section 5, I used that to determine the subset of portfolios that meets the target return requirement. The reason for doing this is because random portfolios generated using **`random_portfolios`** function does not account for the return constraint.
 
-Since the target return is 20% annually, I calculated the average annualized return and subset the portfolios that meet the constraint.
+From the `output1` object in Section 5 which contains the monthly return of all the random portfolios in `randport`, I would subset portfolios that have mean return of 20% (add some wiggle room instead of a hard target, 19.9% to 20.1%) and find portfolios that have the minimum of different risk measures.
 
 ```{r subset of randport with target return}
-mycluster <- makeCluster(6)
+monthly_meanret <- PerformanceAnalytics::Mean.arithmetic(x = output1)
 
-registerDoParallel(mycluster)
+target_return <- monthly_meanret > 0.199/12 & monthly_meanret < 0.201/12
 
-rp_annreturn <- foreach(i = 1:ncol(output1), .combine = "rbind") %dopar% {
-  
-  PerformanceAnalytics::Return.annualized(R = output1[, i], scale = 252, geometric = T)
-  
-  }
+subrp_return <- output1[, target_return == "TRUE"]
 
-stopCluster(mycluster)
-
-subrp_return <- rp_annreturn > 0.08 # relaxing the constraints a little to capture sufficient portfolios
+dim(subrp_return)
 ```
 
-```{r}
-meanrisk_spec <- add.constraint(portfolio = init_spec, type = "return", return_target = 0.2/252)
+Out of 24,999 random portfolios generated in Section 5, only 795 portfolios meet the target return constraint.
 
-set.seed(10)
-
-randport2 <- random_portfolios(portfolio = meanrisk_spec, 
-                               permutations = 15000, 
-                               rp_method = "sample")
-
-dim(randport2)
+```{r subset randport weights}
+sub_randport <- randport[target_return == "TRUE",]
 ```
 
+### 6.1 Mean-Variance Portfolio
 
+Optimize portfolio based on mean-variance:
 
-
-
-
-
-
-
-
-
-
-```{r}
-meanvar_search <- PerformanceAnalytics::StdDev(R = output2, portfolio_method = "single")
+```{r mean variance portfolio}
+meanvar_search <- PerformanceAnalytics::StdDev(R = subrp_return, portfolio_method = "single")
 
 min(meanvar_search)
 
-weight_MeanVar <- randport2[which.min(meanvar_search), ]
+weight_MeanVar <- sub_randport[which.min(meanvar_search),]
 
 weight_MeanVar
 ```
 
+### 6.2 Mean-Semi Deviation Portfolio
 
+Optimize portfolio based on mean-semi deviation:
 
-```{r}
-test_spec <- add.objective(portfolio = meanrisk_spec, type = "return", name = "mean")
+```{r mean semidev portfolio}
+meansemidev_search <- PerformanceAnalytics::SemiDeviation(R = subrp_return)
 
-test_spec <- add.objective(portfolio = test_spec, type = "risk", name = "var")
+min(meansemidev_search)
 
-registerDoSEQ()
+weight_MeanSemiDev <- sub_randport[which.min(meansemidev_search),]
 
-optimize.portfolio(R = returns, portfolio = meanrisk_spec, optimize_method = "random", search_size = 40000)
+weight_MeanSemiDev
 ```
 
+### 6.3 Mean-Downside Deviation Portfolio
 
+Optimize portfolio based on mean-downside deviation:
 
+```{r mean downdev portfolio}
+meandowndev_search <- PerformanceAnalytics::DownsideDeviation(R = subrp_return, MAR = 0.03/12)
 
+min(meandowndev_search)
 
+weight_MeanDownDev <- sub_randport[which.min(meandowndev_search),]
 
+weight_MeanDownDev
+```
 
+### 6.4 Mean-VaR Portfolio
 
+Optimize portfolio based on mean-VaR:
 
+```{r mean VaR portfolio}
+meanVaR_search <- PerformanceAnalytics::VaR(R = subrp_return, p = 0.95, method = "historical")
 
+max(meanVaR_search)
 
+weight_MeanVaR <- sub_randport[which.max(meanVaR_search),]
 
+weight_MeanVaR
+```
 
+### 6.5 Mean-CVaR Portfolio
 
+Optimize portfolio based on mean-CVaR:
 
+```{r mean CVaR portfolio}
+meanCVaR_search <- PerformanceAnalytics::CVaR(R = subrp_return, p = 0.95, method = "historical")
 
+max(meanCVaR_search)
 
+weight_MeanCVaR <- sub_randport[which.max(meanCVaR_search),]
 
+weight_MeanCVaR
+```
 
+### 6.6 Summary of Mean-Risk Portfolios
 
+With the different optimal portfolios created, we can now compare their weights, performance and chart their cumulative returns.
 
+```{r weights of mean risk portfolios}
+weight_comp <- rbind(Mean_Var = weight_MeanVar,
+                     Mean_SemiDev = weight_MeanSemiDev,
+                     Mean_DownDev = weight_MeanDownDev,
+                     Mean_VaR = weight_MeanVaR,
+                     Mean_CVaR = weight_MeanCVaR)
 
+weight_comp
+```
 
+Again, based on the set of random portfolios generated, the `Mean_Var` and `Mean_SemiDev` portfolios have the same asset weights.
 
+We can extract the monthly returns of the selected portfolios from the `subrp_return` object.
 
+```{r extract monthly returns of optimal portfolios}
+return_comp <- cbind(subrp_return[, which.min(meanvar_search)],
+                     subrp_return[, which.min(meansemidev_search)],
+                     subrp_return[, which.min(meandowndev_search)],
+                     subrp_return[, which.max(meanVaR_search)],
+                     subrp_return[, which.max(meanCVaR_search)]) %>%
+  `colnames<-`(c("Mean_Var", "Mean_SemiDev", "Mean_DownDev", "Mean_VaR", "Mean_CVaR"))
 
+dim(return_comp)
+```
 
+```{r plot performance chart of optimal portfolios, fig.align='center'}
+PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
+                                       geometric = T, # Use geometric chaining for portfolio cumulative returns over time
+                                       legend.loc = "topleft",
+                                       main = "Cumulative Returns of Optimal Portfolios")
+
+PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
+                                     geometric = T,
+                                     legend.loc = "bottom",
+                                     main = "Drawdown of Optimal Portfolios")
+```
+
+With an additional constraint of having 20% target return, the optimal portfolios have similar cumulative returns (since we added a target return). The SPY benchmark still has larger drawdowns compared to the optimal portfolios in general. The `Mean_DownDev` portfolio seems to have larger drawdowns amongst the optimal portfolios, followed by `Mean_VaR` and `Mean_CVaR` portfolios.
+
+Below are the common statistics and performance metrics that can be compared to the SPY benchmark.
+
+```{r stats and annualized metrics of optimal portfolios}
+table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
+
+table.Stats(R = cbind(return_comp, benchmark_return), digits = 4)
+
+table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 12, Rf = 0.02/12, digits = 4)
+
+table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, MAR = 0.03/12, digits = 4)
+```
+
+## 7 Final Remarks
+
+While variance and standard deviation have been commonly used as a measure of risk, other downside risk measures may be better suited to quantify the risks that investors face. In Section 5, we see that the other minimum risk portfolios have higher cumulative returns than the minimum variance portfolio, but had drawdowns that were generally between that of the minimum variance portfolio and the SPY benchmark. In Section 6, the mean-variance portfolio had similar cumulative returns and drawdowns compared to the other optimal portfolios of different risk measures. This might be due to the limited permutations of random portfolios generated, which stems from the limited computational power and the expected time I was willing to wait for the random portfolios to be created.
+
+It is important to note that the results are only applicable to the random portfolios I had generated, which can be replicated via the `set.seed` when I created the random portfolios. By increasing the number of permutations, one would likely find another set of portfolios that minimizes the different risk measures.
 
 ## References
 
