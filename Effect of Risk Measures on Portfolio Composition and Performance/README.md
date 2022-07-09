@@ -1,4 +1,4 @@
-## Description of Project
+## Project Description
 
 In this project, I attempted to determine the effects of the different risk measures on portfolio optimization and performance.
 The following risk measures have been used:  
