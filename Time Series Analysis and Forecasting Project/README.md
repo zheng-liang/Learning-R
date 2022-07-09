@@ -1,4 +1,4 @@
-## What is this project about?
+## Project Description
 
 Through this project, I attempted to apply what I had learnt about time series models and forecasting 
 during my undergraduate course using R.  
