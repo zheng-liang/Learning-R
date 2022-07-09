@@ -1,104 +1,95 @@
-# Project 1: Portfolio Optimization, Re-balancing and Back-testing
+## ----setup, include=FALSE-----------------------------------------------------
+knitr::knit_hooks$set(purl = knitr::hook_purl)
 
-# Load package
-library(quantmod)
-library(PerformanceAnalytics)
-library(PortfolioAnalytics)
-library(ROI)
-library(ROI.plugin.glpk)
-library(ROI.plugin.quadprog)
+## ----Load packages, message=FALSE---------------------------------------------
+#Use install.packages() or go to the Packages panel to install packages if they have not been installed
 library(dplyr)
+library(PerformanceAnalytics) # For portfolio performance and risk analysis
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(quantmod) # For obtaining historical prices from Yahoo Finance
+library(ROI) # For ROI solver in portfolio optimization
+library(ROI.plugin.glpk) # Part of the ROI solver for linear optimization
+library(ROI.plugin.quadprog) #Part of the ROI solver for quadratic optimization
 
-# Getting To Know Some Useful Functions --------------------------------------------------
-
-# Getting data from Yahoo Finance for a single stock, example used is Amazon
+## ----Retrieve price data------------------------------------------------------
 AMZN <- getSymbols(Symbols = "AMZN",
                    src = "yahoo",
+                   # Can instead choose "weekly" or "monthly" to import weekly or monthly price data
                    periodicity = "daily",
                    auto.assign = F)
-View(AMZN)
-# Understanding object AMZN
-str(AMZN)
-head(AMZN)
-tail(AMZN)
-summary(AMZN)
+
+## ----Understanding object-----------------------------------------------------
+head(AMZN, n = 4)
+
+tail(AMZN, n = 4)
+
 colSums(is.na(AMZN))
-# Sub-setting the Adjusted Closing Price column
+
+## ----Discrete return and cumulative return plot, fig.align = 'center'---------
 AMZN.Adj <- AMZN[,6]
-View(AMZN.Adj)
-# Determining daily returns of AMZN using discrete calculation
-# Using discrete returns allows us to use additive properties when adding
-# stocks to portfolios. Using method = "log" would result in non-linearity.
+
+# na.omit() removes the first row, which is an NA value as there are no prior data to calculate returns
 AMZN_Returns <- na.omit(Return.calculate(AMZN.Adj, method = "discrete"))
-# We can also chart the cumulative return of AMZN
+# We could use Return.calculate(AMZN.Adj, method = "log") to calculate the log return instead.
+
 chart.CumReturns(AMZN_Returns, 
                  legend.loc = "topleft",
+                 # Could specify geometric = F to use simple/arithmetic return when using log returns in the previous step
                  geometric = T,
                  main = "Cumulative Daily Return of Amazon")
 
-
-
-# Building a Portfolio With 2 or More Stocks ------------------------------
-
-# The above is for getting to understand the features that will be used
-# for building a portfolio with 2 or more stocks down below
-
-# Create a vector of tickers that are to be added into portfolio 
-# Ticker naming convention follows Yahoo Finance.
+## ----Vector of tickers--------------------------------------------------------
 tickers <- c("JNJ", "PG", "AAPL", "TSM", "MSFT", "NVDA")
 
-# Obtain 6th column (Adjusted Closing Price) from the table of each stock in
-# tickers and adding them into price_data
+## ----Import and subset price data---------------------------------------------
 price_data <- NULL
 
 startdate <- "2012-01-01"
-enddate <- "2022-05-25"
+enddate <- "2022-05-23"
+
 for (ticker in tickers) {
-  price_data <- cbind(price_data, 
+  price_data <- cbind(price_data,
                       getSymbols(ticker, 
                                  src = "yahoo",
                                  from = startdate, to = enddate, 
                                  periodicity = "daily", auto.assign = F)[,6])
 }
+
 colnames(price_data) <- tickers
 
-# Understanding object price_data and checking for missing data
-head(price_data)
-tail(price_data)
+## ----Brief details of price_data----------------------------------------------
+head(price_data, n = 4)
+
+tail(price_data, n = 4)
+
 nrow(price_data)
+
 colSums(is.na(price_data))
 
-## Calculate daily return (discrete) of each stock in price_data
+## ----Daily (discrete) return--------------------------------------------------
 returns <- na.omit(Return.calculate(price_data, method = "discrete"))
 
-
-
-## Calculate portfolio return ====================================
-# default is an equal weight portfolio
+## ----Portfolio returns--------------------------------------------------------
 r_noRebal <- Return.portfolio(returns,
                               geometric = T,
                               verbose = T)
 
-  colnames(r_noRebal$returns) <- ("Rp_noRebal")
+colnames(r_noRebal$returns) <- "Rp_noRebal"
 
-  lapply(r_noRebal, head, n = 4)
+lapply(r_noRebal, head, n = 4)
 
+## ----Quarterly rebalancing----------------------------------------------------
 r_withRebal <- Return.portfolio(returns, 
                                 geometric = T, 
                                 rebalance_on = "quarters", 
                                 verbose = T)
 
-  colnames(r_withRebal$returns) <- ("Rp_withRebal")
+colnames(r_withRebal$returns) <- "Rp_withRebal"
 
-ret_comp <- cbind(r_noRebal$returns, r_withRebal$returns)
-
-charts.PerformanceSummary(R = ret_comp,
-                          main = "Comparison of Cumulative Returns",
-                          legend.loc = "topleft")
-
+## ----End of period weights, fig.align = 'center'------------------------------
 eop_weight_noRebal <- r_noRebal$EOP.Weight
 
-  eop_weight_wRebal <- r_withRebal$EOP.Weight
+eop_weight_wRebal <- r_withRebal$EOP.Weight
 
   par(mfrow = c(2,1), mar = c(2, 4, 2, 2))
 
@@ -113,49 +104,52 @@ eop_weight_noRebal <- r_noRebal$EOP.Weight
   
   abline(h = 1/length(colnames(eop_weight_wRebal)), col = "red", lwd = 2)
 
-stats <- table.Stats(ret_comp)
+## ----Performance chart, fig.align = 'center', fig.height=7--------------------
+ret_comp <- cbind(r_noRebal$returns, r_withRebal$returns)
 
+charts.PerformanceSummary(R = ret_comp,
+                          main = "Comparison of Cumulative Returns",
+                          legend.loc = "topleft")
 
+## ----Weights over time without rebalancing, fig.align = 'center', fig.width=6, fig.height=4.5----
+par(mfrow = c(1,1), mar = c(2, 2, 2, 2))
 
-## Create a benchmark for comparison of performance (market portfolio: S&P500) =====
+plot.zoo(eop_weight_noRebal,
+         main = "End-of-Period Weights Over Time Without Rebalancing")
+
+## ----Stats of portfolios------------------------------------------------------
+table.Stats(ret_comp)
+
+## ----Import benchmark price and calculate returns-----------------------------
 benchmark <- getSymbols("SPY", 
                         src = "yahoo",
                         from = startdate, to = enddate, 
                         periodicity = "daily", auto.assign = F)[,6]
-View(benchmark)
+
+nrow(benchmark)
 colSums(is.na(benchmark))
 
-# Calculate benchmark return
 benchmarkReturn <- na.omit(Return.calculate(benchmark, method = "discrete")) %>%
   `colnames<-`("SPY")
 
-## Some Performance Metrics =========================================
-# Risk-free rate assume 3%, but need to remember that data frequency is daily
+## ----metrics------------------------------------------------------------------
 perfMetrics <- round(rbind(CAPM.beta(ret_comp, benchmarkReturn, Rf = 0.03/252),
                            CAPM.alpha(ret_comp, benchmarkReturn, Rf = 0.03/252),
                            SharpeRatio(ret_comp, Rf = 0.03/252, FUN = "StdDev"),
-                           TreynorRatio(ret_comp, benchmarkReturn, Rf = 0.03/252, scale = 252),
-                           InformationRatio(ret_comp, benchmarkReturn)), digits = 4)
+                           TreynorRatio(ret_comp, benchmarkReturn, Rf = 0.03/252),
+                           InformationRatio(ret_comp, benchmarkReturn)), digits = 4
+)
 
-table.CAPM(ret_comp, benchmarkReturn, Rf=0.03/252, scale=252)
+perfMetrics
 
-# To view annualized return and breakdown of return by months
-# and compare between portfolio and benchmark
+## ----Table of annualized returns----------------------------------------------
 cbind(table.AnnualizedReturns(ret_comp, Rf = 0.03/252),
       table.AnnualizedReturns(benchmarkReturn, Rf = 0.03/252))
 
-table.CalendarReturns(exp_portReturns$returns)
+## ----Table of calendar returns------------------------------------------------
 table.CalendarReturns(benchmarkReturn)
 
-
-
-# Portfolio Optimization --------------------------------------------------
-
-# Instead of equally weighted portfolio, we can optimize the portfolio by
-# maximizing return (mean) or minimizing risk (variance/standard deviation)
- 
-## Case 1: Minimizing Variance =============================================
-# Adding constraints and objectives to portspec1 using portfolio.spec()
+## ----Adding constrains and objectives 1---------------------------------------
 portspec1 <- portfolio.spec(colnames(returns))
 
 # Sum of weights constrained to 1, can also specify as type = "full investment"
@@ -173,15 +167,17 @@ portspec1 <- add.objective(portspec1,
                            type = "risk",
                            name = "var")
 
-# Optimization of weights in portfolio based on minimum variance
-# We use "quadprog" as we are solving a quadratic optimization problem
-# Inputting "ROI" instead automatically chooses "quadprog" for this OP
+## ----Optimizing weights to minimize variance----------------------------------
 port_MV <- optimize.portfolio(returns, 
-                              portspec1, 
+                              portspec1,
                               optimize_method = "quadprog",
+                              # Indicating "trace = T" allows us to use 
+                              # additional information in the later parts
                               trace = T)
+
 port_MV
-## Case 2: Maximizing Return ===============================================
+
+## ----Adding constrains and objectives 2---------------------------------------
 portspec2 <- portfolio.spec(colnames(returns))
 
 # We use the same constraints as in Case 1
@@ -197,9 +193,8 @@ portspec2 <- add.constraint(portspec2,
 portspec2 <- add.objective(portspec2,
                            type = "return",
                            name = "mean")
-# Optimization of weights in portfolio based on maximum return
-# We use "glpk" as we are solving a linear optimization problem
-# Inputting "ROI" instead automatically chooses "glpk" for this OP
+
+## ----Optimizing weights to maximize return------------------------------------
 port_MR <- optimize.portfolio(returns, 
                               portspec2,
                               optimize_method = "glpk",
@@ -207,8 +202,7 @@ port_MR <- optimize.portfolio(returns,
 
 port_MR
 
-## Compare returns and standard deviation of portfolios in Case 1 and 2 ======
-# Extract weights from the optimized portfolios
+## ----Extract weights, fig.align = 'center'------------------------------------
 weight_MV <- extractWeights(port_MV)
 
 weight_MR <- extractWeights(port_MR)
@@ -222,7 +216,7 @@ barplot(weight_MV,
 barplot(weight_MR,
         ylab = "Portfolio MR")
 
-# Calculate portfolio return with same periodicity as data input
+## ----Calculate portfolio returns----------------------------------------------
 rp_MV <- Return.portfolio(returns, 
                           weights = weight_MV,
                           rebalance_on = "quarters",
@@ -235,44 +229,36 @@ rp_MR <- Return.portfolio(returns,
                           geometric = T) %>%
   `colnames<-`("Portfolio MR")
 
-# Calculate annualized return, standard deviation and Sharpe ratio
-# Assume risk-free rate to be 3%, remember to change it to daily values
+## ----Chart of performance, fig.align = 'center', fig.height=7-----------------
 comparison <- cbind(rp_MV, rp_MR, benchmarkReturn)
 
 charts.PerformanceSummary(comparison,
                           main = "Comparing Performance of Portfolios",
                           legend.loc = "topleft")
 
+## ----Stats and metrics of portfolios------------------------------------------
 table.Stats(comparison)
 
 table.AnnualizedReturns(comparison, 0.03/252, scale = 252)
 
-
-# Back-testing Performance -----------------------------------------------
-
-## Case 3: Mean-Variance Portfolio Optimization ==========================
+## ----Adding constrains and objectives 3---------------------------------------
 portspec3 <- portfolio.spec(colnames(returns))
 
 # Slight change in weight_sum to reduce restrictiveness while optimizing
 portspec3 <- add.constraint(portspec3, 
                             type = "weight_sum",
-                            min_sum=0.99, max_sum=1.01)
+                            min_sum= 0.99, max_sum = 1.01)
 
 portspec3 <- add.constraint(portspec3, 
                             type="box", 
                             min=0, max=0.4)
 
-# Include transaction cost, assumed to be 2%
-portspec3 <- add.constraint(portspec3,
-                            type = "transaction_cost",
-                            ptc = 0.02)
-
-# Add a constraint to have a target mean
+# Add a constraint to have a target return
 portspec3 <- add.constraint(portspec3,
                             type = "return",
                             return_target = 0.15/252)
 
-# Adding a return and risk objective, thus we maximize mean return per unit of risk
+# Adding a return objective, thus we maximize mean return per unit of risk
 portspec3 <- add.objective(portspec3,
                            type = "return",
                            name = "mean")
@@ -281,34 +267,37 @@ portspec3 <- add.objective(portspec3,
                            type = "risk",
                            name = "var")
 
-# Finding optimal portfolio weights using estimation period
-# Generate a set of random portfolios that will be used in optimization
-randport <- random_portfolios(portfolio = portspec3,
-                              permutations = 20000,
-                              rp_method = "simplex")
+## ----Optimizing portfolio, message=FALSE, warning=FALSE-----------------------
+set.seed(123)
 
-# Quarterly re-balancing back-test
+randport <- random_portfolios(portfolio = portspec3, 
+                              permutations = 20000, 
+                              rp_method = "sample", 
+                              eliminate = T)
+
 port_MeanVar_qRebal <- optimize.portfolio.rebalancing(returns,
                                                       portspec3,
                                                       optimize_method = "random",
                                                       rebalance_on = "quarters",
-                                                      # max Sharpe 
-                                                      maxSR = T,
                                                       rp = randport,
                                                       search_size = 5000,
-                                                      training_period = 252,
-                                                      rolling_window = 45,
-                                                      trace = T)
+                                                      training_period = 504,
+                                                      rolling_window = 45)
+
+## ----Weights, fig.align = 'center'--------------------------------------------
 chart.Weights(port_MeanVar_qRebal)
 
+## ----MeanVar Portfolio Returns------------------------------------------------
 w_qOptim <- extractWeights(port_MeanVar_qRebal)
 
 rp_MeanVar <- Return.portfolio(returns, 
                                weights = w_qOptim, 
                                geometric = T)
 
+## ----Comparison of performance, fig.align = 'center', fig.height=7------------
 evaluation <- cbind(rp_MeanVar,benchmarkReturn)
 
-charts.PerformanceSummary(evaluation, Rf=0.03/252)
+charts.PerformanceSummary(evaluation, Rf=0.03/252, main = "Performance of Mean-Variance Portfolio")
 
-table.AnnualizedReturns(evaluation, Rf=0.03/252, scale = 252)
+table.AnnualizedReturns(evaluation, Rf=0.03/252)
+

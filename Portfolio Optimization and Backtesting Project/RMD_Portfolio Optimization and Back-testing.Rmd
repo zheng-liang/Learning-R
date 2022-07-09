@@ -1,9 +1,17 @@
 ---
 title: 'Basic Portfolio Optimization, Re-balancing and Back-Testing in R'
+author: "zhengliang"
+date: "`r Sys.Date()`"
 output: 
-  github_document:
+  html_document:
     toc: true
+    toc_float: true
+    code_folding: show
 ---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
 
 # 1 Introduction
 
@@ -15,13 +23,13 @@ The first part starts off with understanding some basic functions in the relevan
 
 ```{r Load packages, message=FALSE}
 #Use install.packages() or go to the Packages panel to install packages if they have not been installed
-library(quantmod)
-library(PerformanceAnalytics)
-library(PortfolioAnalytics)
-library(ROI)
-library(ROI.plugin.glpk)
-library(ROI.plugin.quadprog)
 library(dplyr)
+library(PerformanceAnalytics) # For portfolio performance and risk analysis
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(quantmod) # For obtaining historical prices from Yahoo Finance
+library(ROI) # For ROI solver in portfolio optimization
+library(ROI.plugin.glpk) # Part of the ROI solver for linear optimization
+library(ROI.plugin.quadprog) #Part of the ROI solver for quadratic optimization
 ```
 
 # 3 Getting To Know Some Useful Functions
@@ -42,7 +50,9 @@ Let us get some details about the object `AMZN`.
 
 ```{r Understanding object}
 head(AMZN, n = 4)
+
 tail(AMZN, n = 4)
+
 colSums(is.na(AMZN))
 ```
 
@@ -101,8 +111,11 @@ Let us see some details about the object `price_data`.
 
 ```{r Brief details of price_data}
 head(price_data, n = 4)
+
 tail(price_data, n = 4)
+
 nrow(price_data)
+
 colSums(is.na(price_data))
 ```
 
@@ -120,7 +133,7 @@ Therefore, we need to calculate the discrete returns of the securities.
 returns <- na.omit(Return.calculate(price_data, method = "discrete"))
 ```
 
-Subsequently, we can use the individual security returns in `returns` to calculate the portfolio's daily returns. Using the **`Return.portfolio`** function, we input `returns` and indicate to use geometric chaining to calculate portfolio return. There is an option to specify a vector of desired weights for the individual securities and leaving it out uses an equal weight as the default
+Subsequently, we can use the individual security returns in `returns` to calculate the portfolio's daily returns. Using the **`Return.portfolio`** function, we input `returns` and indicate to **not** use geometric chaining to calculate portfolio return. There is an option to specify a vector of desired weights for the individual securities and leaving it out uses an equal weight as the default.
 
 To view the object `r_noRebal` we have to use the **`lapply`** function as the object is a list, and due to the size of the output, I have indicated to show only the first four rows.
 
@@ -364,7 +377,7 @@ portspec3 <- portfolio.spec(colnames(returns))
 # Slight change in weight_sum to reduce restrictiveness while optimizing
 portspec3 <- add.constraint(portspec3, 
                             type = "weight_sum",
-                            min_sum=0.99, max_sum=1.01)
+                            min_sum= 0.99, max_sum = 1.01)
 
 portspec3 <- add.constraint(portspec3, 
                             type="box", 
@@ -374,11 +387,6 @@ portspec3 <- add.constraint(portspec3,
 portspec3 <- add.constraint(portspec3,
                             type = "return",
                             return_target = 0.15/252)
-
-# Include transaction cost, assumed to be 2%
-portspec3 <- add.constraint(portspec3,
-                            type = "transaction_cost",
-                            ptc = 0.02)
 
 # Adding a return objective, thus we maximize mean return per unit of risk
 portspec3 <- add.objective(portspec3,
@@ -392,25 +400,25 @@ portspec3 <- add.objective(portspec3,
 
 The **`PortfolioAnalytics`** package provides a handy function called **`optimize.portfolio.rebalancing`** which can provide back-testing capabilities. It is similar to the function **`optimize.portfolio`** but has requires other inputs. To do back-testing, we need to input the training period for when the portfolio will be optimized, and the rolling window which rolls over historical data. For this part, I will be using the random portfolios solver and in order to do so, I will first generate a matrix of random portfolios. This will then be fed to the optimization function to prevent recalculation. A larger number of random portfolios (till a certain number) tend to lead to better optimization results but will also require more time for calculation.
 
-```{r Optimizing portfolio, message=FALSE}
-randport <- random_portfolios(portfolio = portspec3,
-                              permutations = 20000,
-                              rp_method = "simplex")
+```{r Optimizing portfolio, message=FALSE, warning=FALSE}
+set.seed(123)
+
+randport <- random_portfolios(portfolio = portspec3, 
+                              permutations = 20000, 
+                              rp_method = "sample", 
+                              eliminate = T)
 
 port_MeanVar_qRebal <- optimize.portfolio.rebalancing(returns,
                                                       portspec3,
                                                       optimize_method = "random",
                                                       rebalance_on = "quarters",
-                                                      # max Sharpe ratio 
-                                                      maxSR = T,
                                                       rp = randport,
                                                       search_size = 5000,
-                                                      training_period = 252,
-                                                      rolling_window = 45,
-                                                      trace = T)
+                                                      training_period = 504,
+                                                      rolling_window = 45)
 ```
 
-I have generated the `randport` first so that the **`optimize.portfolio.rebalancing`** function does not recalculate these portfolios. Since our data is in daily periods, I have used 252 days as the optimization period for the portfolio for which weights are calculated, and this historical data rolls forward by 45 days each time. We can take a look at how the weights changed over time by using the **`chart.Weights`** function.
+I have generated the `randport` first so that the **`optimize.portfolio.rebalancing`** function does not recalculate these portfolios. Since our data is in daily periods, I have used 504 days as the optimization period for the portfolio for which weights are calculated, and this historical data rolls forward by 45 days each time. We can take a look at how the weights changed over time by using the **`chart.Weights`** function.
 
 ```{r Weights, fig.align = 'center'}
 chart.Weights(port_MeanVar_qRebal)
@@ -431,7 +439,7 @@ Lastly, we can visualize the performance of this portfolio by plotting its cumul
 ```{r Comparison of performance, fig.align = 'center', fig.height=7}
 evaluation <- cbind(rp_MeanVar,benchmarkReturn)
 
-charts.PerformanceSummary(evaluation, Rf=0.03/252)
+charts.PerformanceSummary(evaluation, Rf=0.03/252, main = "Performance of Mean-Variance Portfolio")
 
 table.AnnualizedReturns(evaluation, Rf=0.03/252)
 ```
