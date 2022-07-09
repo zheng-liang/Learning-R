@@ -39,7 +39,7 @@ I used the stock returns of Microsoft Corporation (MSFT) to illustrate the diffe
 
 ```{r msft price}
 startdate <- "2010-01-01"
-enddate <- "2022-06-01"
+enddate <- "2022-05-31"
 
 MSFT <- quantmod::getSymbols(Symbols = "MSFT", # Indicate a symbol that corresponds to stock in Yahoo Finance
                              src = "yahoo", # Indicate to search stock prices from Yahoo Finance
@@ -336,7 +336,7 @@ output1 <- foreach(i = 1:nrow(randport), .combine = "cbind") %dopar% {
   
   rp_return <- PerformanceAnalytics::Return.portfolio(R = returns, 
                                                       weights = randport[i,], 
-                                                      geometric = F, # based on portfolio theory, return of portfolio is simple sum of weighted return of individual assets
+                                                      geometric = T,
                                                       rebalance_on = "quarters")
   
   }
@@ -441,8 +441,6 @@ port_weights <- rbind(Min_Var = weight_MinVar,
 port_weights
 ```
 
-Based on the random portfolios generated, `Min_Var` and `Min_SemiDev` portfolios have the same asset weights, which would mean they have the same performance.
-
 Since we have calculated the monthly returns of each portfolio in `output1`, we can extract it and save it into a suitable data frame.
 
 ```{r extract monthly returns of min risk portfolios}
@@ -485,7 +483,7 @@ PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return),
                                      main = "Drawdown of Minimum Risk Portfolios")
 ```
 
-The minimum risk portfolios all had better cumulative returns than the SPY benchmark, with the `Min_HCVAR` and `Min_HVaR` having similar cumulative returns, followed by `Min_DownDev` and `Min_Var`/`Min_SemiDev` portfolios. In general, the SPY benchmark has larger drawdowns than the minimum risk portfolios.
+The minimum risk portfolios all had better cumulative returns than the SPY benchmark. In descending order of cumulative returns based on the chart, `Min_HCVaR` > `Min_DownDev` > `Min_HVaR` > `Min_SemiDev` > `Min_Var` portfolios. In general, the SPY benchmark has larger drawdowns than the minimum risk portfolios.
 
 ```{r stats and annualized metrics of minimum risk portfolios}
 table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
@@ -513,7 +511,7 @@ subrp_return <- output1[, target_return == "TRUE"]
 dim(subrp_return)
 ```
 
-Out of 24,999 random portfolios generated in Section 5, only 795 portfolios meet the target return constraint.
+Out of 24,999 random portfolios generated in Section 5, only 796 portfolios meet the target return constraint.
 
 ```{r subset randport weights}
 sub_randport <- randport[target_return == "TRUE",]
@@ -630,7 +628,7 @@ PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return),
                                      main = "Drawdown of Optimal Portfolios")
 ```
 
-With an additional constraint of having 20% target return, the optimal portfolios have similar cumulative returns (since we added a target return). The SPY benchmark still has larger drawdowns compared to the optimal portfolios in general. The `Mean_DownDev` portfolio seems to have larger drawdowns amongst the optimal portfolios, followed by `Mean_VaR` and `Mean_CVaR` portfolios.
+With an additional constraint of having 20% target return, the optimal portfolios have similar cumulative returns (since we added a target return). The SPY benchmark still has larger drawdowns compared to the optimal portfolios in general.
 
 Below are the common statistics and performance metrics that can be compared to the SPY benchmark.
 
@@ -661,9 +659,3 @@ It is important to note that the results are only applicable to the random portf
 <https://www.investopedia.com/terms/s/semideviation.asp>
 
 <https://pages.stern.nyu.edu/~adamodar/pdfiles/valrisk/ch4.pdf>
-
-
-
-
-
-

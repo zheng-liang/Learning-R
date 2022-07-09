@@ -10,7 +10,7 @@ library(quantmod) # For obtaining historical prices from Yahoo Finance
 
 ## ----msft price---------------------------------------------------------------
 startdate <- "2010-01-01"
-enddate <- "2022-06-01"
+enddate <- "2022-05-31"
 
 MSFT <- quantmod::getSymbols(Symbols = "MSFT", # Indicate a symbol that corresponds to stock in Yahoo Finance
                              src = "yahoo", # Indicate to search stock prices from Yahoo Finance
@@ -171,7 +171,7 @@ output1 <- foreach(i = 1:nrow(randport), .combine = "cbind") %dopar% {
   
   rp_return <- PerformanceAnalytics::Return.portfolio(R = returns, 
                                                       weights = randport[i,], 
-                                                      geometric = F, # based on portfolio theory, return of portfolio is simple sum of weighted return of individual assets
+                                                      geometric = T,
                                                       rebalance_on = "quarters")
   
   }
