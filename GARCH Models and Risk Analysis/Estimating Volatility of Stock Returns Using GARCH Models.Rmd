@@ -1,0 +1,155 @@
+---
+title: "Estimating Volatility of Stock Returns Using GARCH Models"
+author: "zhengliang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+(To be written at the end)
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(dplyr)
+library(forecast) # For ARIMA models, forecasting and evaluation
+library(PerformanceAnalytics) # For portfolio performance and risk analysis
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(quantmod) # For obtaining historical prices from Yahoo Finance
+library(rugarch) # For univariate GARCH models
+library(urca) # For unit root tests
+```
+
+## 3 Understanding GARCH models
+
+In typical time series analysis, we usually require that the time series data is stationary with a constant mean and constant variance. However, we may have stationarity with constant unconditional variance (homoskedastic) but changing conditional variance (conditional heteroskedasticity), commonly seen in financial data. In such data, the plots would show periods of volatility clustering, where there are periods of high and low volatility and variance is not constant in these periods. For instance, let us take a look at the daily returns of Apple Inc. (AAPL), which we will be using for the rest of this project.
+
+```{r load AAPL price data}
+# Load AAPL price data from Yahoo Finance using quantmod package
+
+# Set start and end dates for data retrieval
+startdate <- as.Date("2010-01-01")
+enddate <- as.Date("2022-07-01")
+
+# Retrieve price data
+AAPL_price <- quantmod::getSymbols(Symbols = "AAPL", 
+                                   src = "yahoo", 
+                                   from = startdate, to = enddate, 
+                                   periodicity = "daily", 
+                                   auto.assign = F)
+
+# View the first and last 6 observations in AAPL_price
+c(head(AAPL_price), tail(AAPL_price))
+
+# Check number of observations
+nrow(AAPL_price)
+
+# Check for missing data
+colSums(is.na(AAPL_price))
+```
+
+```{r calculate log returns}
+# Calculate log/continuous returns using Adjusted column (column 6)
+
+# Remove first row of calculated returns since returns cannot be calculated for first observation
+# Multiply by 100 as daily returns tend to have very small values as decimal format
+rAAPL <- PerformanceAnalytics::Return.calculate(prices = AAPL_price[, 6], method = "log")[-1,] * 100
+
+# Check that first row has been removed
+head(rAAPL)
+nrow(rAAPL)
+
+# Chart daily log-returns over time
+plot.zoo(rAAPL, main = "Daily Log-Returns of AAPL", xlab = "Time", ylab = "Log-Return (in %)")
+```
+
+If we were to only look at the period in early 2020 (COVID-19 outbreak), we see that there is a period where large absolute returns are followed by large absolute returns, which then starts to return to "normal". I charted the monthly volatilty (measured using annualized standard deviation) of `rAAPL` to better present the fluctuations in returns that might not be easily seen in the daily returns plot.
+
+```{r rolling volatility of AAPL returns}
+# Plot rolling volatility of AAPL returns
+
+# width = 22 to approximately calculate annualized sd using a monthly rolling-window
+PerformanceAnalytics::chart.RollingPerformance(R = rAAPL, width = 22, FUN = "sd.annualized", scale = 252, main = "AAPL Monthly Volatility")
+```
+
+We can check if the series is stationary using an Augmented Dickey Fuller Test and Kwiatkowski-Phillips-Schmidt-Shin Test.
+
+```{r ADF test on AAPL returns}
+# ADF Test with Drift, lags selected based on AIC
+
+rAAPL %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+# KPSS Test
+
+rAAPL %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+The test-statistic value of `tau2` -40.25 against the critical value of -2.86 at the 5% significance level means that we can reject the null hypothesis (alternative hypothesis is that the time series does not have unit root). The KPSS test-statistic 0.048 against the 5% critical value of 0.46 means that we cannot reject the null hypothesis (alternative hypothesis that the time series is not stationary).
+
+Despite varying variances at different periods, the ADF and KPSS tests shows that the series is stationary. The problem of conditional heteroskedasticity is not addressed in ARIMA and other models that assumed constant variance. We can use GARCH models to estimate this volatility to make better forecasts of returns. Before discussing GARCH, it may be helpful to talk about the ARCH model since GARCH was an improvement of it.
+
+### 3.1 ARCH Models
+
+ARCH or AutoRegressive Conditional Heteroskedasticity models can be thought of as an Autoregressive model. Suppose that the returns was modelled as such (remains true for all the GARCH models):
+
+$$r_t = \mu + \varepsilon_t$$
+
+where $\mu$ can be a constant or represented with ARMA models, and $\varepsilon_t$ is the residual at time $t$. An ARCH(1) model is then formulated as:
+
+$$Var(\varepsilon_t) = \sigma_t^2 = \alpha_0 + \alpha_1 \varepsilon^2_{t-1}$$
+
+What the formula essentially say is that the conditional variance in the current period ($\sigma_t^2$) is affected by the errors in the previous period. $\alpha_0 > 0$ since variance of first period should also be non-negative and $\alpha_1 > 0$ so that larger error terms in the previous period means higher conditional variance but $\alpha_1 < 1$ to prevent "explosive" variance. This can be extended to an ARCH(q) model where we have $q$ lags of error terms.
+
+
+
+### 3.2 Standard GARCH Models
+
+In order to capture the effects of volatility clustering, an ARCH model with many lags may be required. To solve this issue, the standard Generalized ARCH (sGARCH) can be used. The model can be thought of as an Autoregressive Moving Average Model, and is the basic model of in the GARCH variation of models. A GARCH(1, 1) model can be written as:
+
+$$\sigma_t^2 = \alpha_0 + \alpha_1 \varepsilon_{t-1}^2 + \beta_1 \sigma_{t-1}^2 ~, \text{ where } \alpha_0,~ \alpha_1,~ \beta_1 > 0$$
+
+Essentially, the conditional variance in the current period is affected by the errors and the conditional variance in the previous period. Similar to ARCH, the model can be extended to a GARCH(p, q) model with $p$ lags of conditional variance and $q$ lags of error terms.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## References
+
+<https://core.ac.uk/download/pdf/132797589.pdf>
+
+<https://www.diva-portal.org/smash/get/diva2:1566342/FULLTEXT01.pdf>
+
+
+
+
