@@ -31,7 +31,7 @@ library(urca) # For unit root tests
 
 ## 3 Understanding GARCH Models
 
-In typical time series analysis, we usually require that the time series data is stationary with a constant mean and constant variance. However, we may have stationarity with constant unconditional variance (homoskedastic) but changing conditional variance (conditional heteroskedasticity), commonly seen in financial data. In such data, the plots would show periods of volatility clustering, where there are periods of high and low volatility and variance is not constant in these periods. For instance, let us take a look at the weekly returns of Apple Inc. (AAPL), which we will be using for the rest of this project.
+In typical time series analysis, we usually require that the time series data is stationary with a constant mean and constant variance. However, we may have stationarity with changing conditional variance (conditional heteroskedasticity), commonly seen in financial data. In such data, the plots would show periods of volatility clustering, where there are periods of high and low volatility and variance is not constant in these periods. For instance, let us take a look at the weekly returns of Apple Inc. (AAPL), which we will be using for the rest of this project.
 
 ```{r load AAPL price data}
 # Load AAPL price data from Yahoo Finance using quantmod package
@@ -172,7 +172,7 @@ archspec <- rugarch::ugarchspec(variance.model = archmodel, mean.model = meanmod
 ```{r fit ARCH(1) model with normal distribution}
 # Fit the data to the ARCH(1) specification
 
-fitARCH <- rugarch::ugarchfit(spec = archspec, data = trainset)
+fitARCH <- rugarch::ugarchfit(spec = archspec, data = trainset, solver = "hybrid")
 
 fitARCH
 ```
@@ -183,20 +183,34 @@ $$\hat{r}_t = 0.519 + \hat{\varepsilon}_t \\ \widehat{Var(\varepsilon_t)} = \hat
 
 However, coefficient for $\varepsilon_{t-1}^2$ is insignificant at the 5% significance level. The second table `Information Criteria` shows the different information criteria values, which can be compared across models to check which fits the data better. The third table `Weighted Ljung-Box Test on Standardized Residuals` shows results for serial correlation in the residuals and based on the test, the null hypothesis could not be rejected. The next table that interests us is the `Weighted ARCH LM Tests` and the low p-values means that we reject the null hypothesis (alternative is that there is ARCH effects). We may need to increase the order of ARCH terms to account for the rest of the ARCH effects. The last table `Adjusted Pearson Goodness-of-Fit Test` shows that the assumption of normally distributed errors cannot be rejected, but it is still good practice to try other distributions.
 
-I tried an ARCH(p) model with a Student's t-distribution to account for the rest of the ARCH effects and the fat-tailed distribution.
+I created an ARCH(p) model to account for remaining ARCH effects, still using the assumed normal distribution of errors.
 
-```{r ARCH(2) model with t-distribution}
+```{r ARCH(2) model with normal distribution}
+# Specify an ARCH(2) model
 arch2model <- list(model = "sGARCH", garchOrder = c(2, 0))
 
+# Assume normal distribution of error term z_t
+arch2spec <- rugarch::ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "norm")
+
+fitARCH2 <- ugarchfit(spec = arch2spec, data = trainset, solver = "hybrid")
+
+fitARCH2
+```
+
+ARCH LM Tests show that we cannot reject the null hypothesis, so we have sufficiently accounted for ARCH effects in the model.
+
+I tried an ARCH(2) model with a Student's t-distribution to account for the fat-tailed distribution.
+
+```{r ARCH(2) model with t-distribution}
 # Assume a normal distribution of the error term z_t
 arch2spec_std <- rugarch::ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "std")
 
-fitARCH2_std <- ugarchfit(spec = arch2spec_std, data = trainset)
+fitARCH2_std <- ugarchfit(spec = arch2spec_std, data = trainset, solver = "hybrid")
 
 fitARCH2_std
 ```
 
-With the t-distribution ARCH(2) model, the coefficient of $\varepsilon_{t-1}^2$ is still insignificant, but we have lower AIC and ARCH LM Tests show that we cannot reject the null hypothesis.
+With the t-distribution ARCH(2) model, the coefficient of $\varepsilon_{t-1}^2$ is still insignificant, but we have lower AIC.
 
 Finally, I created an ARCH(2) model with a skewed t-distribution to account for the heavy tail and skewed distribution.
 
@@ -205,7 +219,7 @@ Finally, I created an ARCH(2) model with a skewed t-distribution to account for 
 
 arch2spec_sstd <- ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "sstd")
 
-fitARCH2_sstd <- rugarch::ugarchfit(spec = arch2spec_sstd, data = trainset)
+fitARCH2_sstd <- rugarch::ugarchfit(spec = arch2spec_sstd, data = trainset, solver = "hybrid")
 
 fitARCH2_sstd
 ```
@@ -248,14 +262,14 @@ garchmodel <- list(model = "sGARCH", garchOrder = c(1, 1))
 garchspec <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "norm")
 
 # Fit GARCH(1, 1)
-fitGARCH11 <- rugarch::ugarchfit(spec = garchspec, data = trainset)
+fitGARCH11 <- rugarch::ugarchfit(spec = garchspec, data = trainset, solver = "hybrid")
 
 fitGARCH11
 ```
 
 With a GARCH(1, 1) model, the $\alpha_1$ is statistically significant, standardized residuals do not have serial correlation and there are no ARCH effects left after including the GARCH term. The Adjusted Pearson Goodness-of-Fit Test statistic also shows that we cannot reject that the errors follow a normal distribution. We can write the formula as:
 
-$$r_t = 0.605 + \hat{\sigma}_t \hat{z}_t \\ \widehat{Var(\varepsilon_t)} = \hat{\sigma}_t = 3.732 + 0.109 \varepsilon_{t-1}^2 + 0.611 \sigma_{t-1}^2$$
+$$\hat{r}_t = 0.605 + \hat{\sigma}_t \hat{z}_t \\ \widehat{Var(\varepsilon_t)} = \hat{\sigma}_t^2 = 3.732 + 0.109 \varepsilon_{t-1}^2 + 0.611 \sigma_{t-1}^2$$
 
 As per the ARCH models, I created GARCH(1, 1) with the assumption that errors follow a t-distribution and a skewed t-distribution.
 
@@ -264,19 +278,19 @@ As per the ARCH models, I created GARCH(1, 1) with the assumption that errors fo
 
 garchspec_std <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "std")
 
-fitGARCH11_std <- rugarch::ugarchfit(spec = garchspec_std, data = trainset)
+fitGARCH11_std <- rugarch::ugarchfit(spec = garchspec_std, data = trainset, solver = "hybrid")
 
 fitGARCH11_std
 ```
 
-Using the t-distribution causes $\omega$ and $\alpha_1$ to become insignificant.
+Using the t-distribution led to insignificant $\omega$ and $\alpha_1$.
 
 ```{r GARCH(1,1) with skewed t-distribution}
 # GARCH(1, 1) with errors that follow a skewed t-distribution
 
 garchspec_sstd <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "sstd")
 
-fitGARCH11_sstd <- rugarch::ugarchfit(spec = garchspec_sstd, data = trainset)
+fitGARCH11_sstd <- rugarch::ugarchfit(spec = garchspec_sstd, data = trainset, solver = "hybrid")
 
 fitGARCH11_sstd
 ```
@@ -317,7 +331,7 @@ gjrmodel <- list(model = "gjrGARCH", garchOrder = c(1, 1))
 gjrspec <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "norm")
 
 # Fit GARCH(1, 1)
-fitGJR11 <- rugarch::ugarchfit(spec = gjrspec, data = trainset)
+fitGJR11 <- rugarch::ugarchfit(spec = gjrspec, data = trainset, solver = "hybrid")
 
 fitGJR11
 ```
@@ -325,19 +339,21 @@ fitGJR11
 With the GJR-GARCH(1, 1) with normally distributed errors, none of the coefficients in the models are significant. This might hint at a mis-specification of models. Let's try the assumption of t-distribution and skewed t-distribution.
 
 ```{r GJR-GARCH(1,1) with t-distribution}
+# Assume Student's t-distribution of error term z_t
 gjrspec_std <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "std")
 
 # Fit GARCH(1, 1)
-fitGJR11_std <- rugarch::ugarchfit(spec = gjrspec_std, data = trainset)
+fitGJR11_std <- rugarch::ugarchfit(spec = gjrspec_std, data = trainset, solver = "hybrid")
 
 fitGJR11_std
 ```
 
 ```{r GJR-GARCH(1,1) with skewed t-distribution}
+# Assume skewed t-distribution of error term z_t
 gjrspec_sstd <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "sstd")
 
 # Fit GARCH(1, 1)
-fitGJR11_sstd <- rugarch::ugarchfit(spec = gjrspec_sstd, data = trainset)
+fitGJR11_sstd <- rugarch::ugarchfit(spec = gjrspec_sstd, data = trainset, solver = "hybrid")
 
 fitGJR11_sstd
 ```
@@ -362,6 +378,94 @@ plot(fitGJR11_std, which = 8)
 plot(fitGJR11_std, which = 9)
 ```
 
+### 3.4 Exponential GARCH Models
+
+EGARCH models, similar to GJR-GARCH models, resolves the asymmetric patterns of volatility to positive and negative shocks. An EGARCH(1, 1) model is written as:
+
+$$\ln(\sigma_t^2) = \omega + \bigg[ \alpha_1 z_{t-1} + \gamma_1 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg) \bigg] + \beta_1 \ln(\sigma_{t-1}^2)$$
+
+$\gamma_1$ is the coefficient of the EGARCH term $\gamma_1 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg)$. If negative shocks cause higher volatility than positive shocks, then $\alpha_1$ should be negative. This is because, if $z_{t-1} \ge 0$, we would have $(-\alpha_1 + \gamma_1)z_{t-1} - \gamma_1 E(|z_{t-1}|)$ and if $z_{t-1} < 0$, we would have $(\alpha_1 + \gamma_1)z_{t-1} - \gamma_1 E(|z_{t-1}|)$, which creates higher conditional volatility when there is a negative shock.
+
+Create an EGARCH(1, 1) model specification with normally distributed errors:
+
+```{r EGARCH(1,1) with normal distribution}
+# Specify EGARCH(1,1) model 
+egarchmodel <- list(model = "eGARCH", garchOrder = c(1, 1))
+
+# Assume a normal distribution of the error term z_t
+egarchspec <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "norm")
+
+# Fit GARCH(1, 1)
+fitEGARCH11 <- rugarch::ugarchfit(spec = egarchspec, data = trainset, solver = "hybrid")
+
+fitEGARCH11
+```
+
+Based on the output, we can write the formula as:
+
+$$\hat{r}_t = 0.535 + \hat{\sigma}_t \hat{z}_t \\ \ln(\hat{\sigma}_t^2) = 1.045 - 0.275z_{t-1} + 0.163 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg) + 0.587 \ln(\sigma_{t-1}^2)$$
+
+All the coefficients are significant, standardized residuals are not serially correlated and ARCH effects have been sufficiently captured. I have generated the EGARCH with assumed t-distribution and skewed t-distribution of errors.
+
+```{r EGARCH(1,1) with t-distribution}
+# Assume a t-distribution of the error term z_t
+egarchspec_std <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "std")
+
+# Fit GARCH(1, 1)
+fitEGARCH11_std <- rugarch::ugarchfit(spec = egarchspec_std, data = trainset, solver = "hybrid")
+
+fitEGARCH11_std
+```
+
+```{r EGARCH(1,1) with skewed t-distribution}
+# Assume a skewed t-distribution of the error term z_t
+egarchspec_sstd <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "sstd")
+
+# Fit GARCH(1, 1)
+fitEGARCH11_sstd <- rugarch::ugarchfit(spec = egarchspec_sstd, data = trainset, solver = "hybrid")
+
+fitEGARCH11_sstd
+```
+
+```{r plot EGARCH(1,1) with t-distribution}
+# Plot some data from the EGARCH(1, 1) with t-distribution
+
+par(mfrow = c(2, 2))
+
+# Actual return series with conditional SD
+plot(fitEGARCH11_std, which = 1)
+
+# Conditional volatility vs absolute returns
+plot(fitEGARCH11_std, which = 3)
+
+# Distribution of residuals
+plot(fitEGARCH11_std, which = 8)
+
+# Q-Q plot of residuals to check for normality
+plot(fitEGARCH11_std, which = 9)
+```
+
+### 3.5 Summary
+
+In this section, I have estimated 4 different models, with 3 different assumed distribution of the error $z_t$. I have created a table comparing their AIC values below.
+
+| Models          | Normal Distribution | t-Distribution | Skewed t-Distribution |
+|:----------------|:-------------------:|:--------------:|:---------------------:|
+| ARCH(2)         | 5.397               | 5.366          | 5.367                 |
+| GARCH(1, 1)     | 5.409               | 5.367          | 5.366                 |
+| GJR-GARCH(1, 1) | 5.373               | 5.343          | 5.341                 |
+| EGARCH(1, 1)    | 5.371               | 5.344          | 5.343                 |
+
+Despite the rather low AIC values of the GJR models, the $\gamma$ coefficient for the $\varepsilon_{t-1}^2 I_{t-1}$ term was insignificant when looking at the robust errors. However, I would still consider this model in the forecast evaluation in the next section.
+
+## 4 Evaluating Forecast Performance
+
+In this section, I evaluated the out-of-sample forecast performance of the 12 models created in Section 3. However, before jumping into the forecast, there is a need to highlight the difficulty of evaluating GARCH models. 
+
+
+
+
+
 
 
 
@@ -382,6 +486,8 @@ plot(fitGJR11_std, which = 9)
 <https://core.ac.uk/download/pdf/132797589.pdf>
 
 <https://www.diva-portal.org/smash/get/diva2:1566342/FULLTEXT01.pdf>
+
+<https://faculty.washington.edu/ezivot/econ589/ch18-garch.pdf>
 
 <https://en.wikipedia.org/wiki/Autoregressive_conditional_heteroskedasticity>
 
