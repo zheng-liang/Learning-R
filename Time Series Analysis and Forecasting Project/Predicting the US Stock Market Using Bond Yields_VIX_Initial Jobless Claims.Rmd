@@ -1,0 +1,162 @@
+---
+title: "Predicting the U.S. Stock Market Using Bond Yields, VIX and Initial Jobless Claims"
+author: "TAN Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+(To be written last)
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(ARDL) # For ARDL models lag selection
+library(corrplot) # For visualizing correlation between variables
+library(dplyr) # For data manipulation
+library(lubridate) # For manipulating time series objects
+library(PerformanceAnalytics) # For portfolio performance and risk analysis
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(quantmod) # For obtaining historical data from Yahoo Finance and FRED
+library(urca) # For unit root tests
+```
+
+## 3 Description of Variables
+
+In this section, I briefly described the four variables that were used in the project and their expected univariate relationship with the returns of S&P500. I would be using the weekly data of each variable since data for Initial Jobless Claims is released weekly.
+
+### 3.1 SPDR S&P 500 ETF
+
+The S&P 500 Index (ticker in Yahoo Finance: ^GSPC) measures the stock performance of the 500 largest companies listed in the U.S. by market capitalization and is usually used as a gauge of the overall U.S. stock market. The SPDR S&P 500 ETF (ticker: SPY) tracks this index and will be used as the dependent variable in the models that will be used in Section 4. 
+
+I have downloaded and stored the data into the object `spy_price`.
+
+```{r retrieve and store SPY price data}
+# Retrieve SPY historical data from Yahoo Finance using quantmod package
+
+# Set start and end date for data retrieval
+startdate <- as.Date("2000-01-01")
+enddate <- as.Date("2022-07-01")
+
+spy_price <- getSymbols(Symbols = "SPY", 
+                        src = "yahoo", 
+                        auto.assign = F, 
+                        from = startdate, to = enddate, 
+                        periodicity = "weekly")
+
+# Show first and last 6 observations
+head(spy_price); tail(spy_price)
+
+# Number of rows of data
+nrow(spy_price)
+
+# Check for missing data
+colSums(is.na(spy_price))
+```
+
+The dates can be a little misleading when downloading weekly data but here is what each column refers to:
+
+1. Date: Week starts with Saturday and ends with Friday, data recorded on Saturday
+2. SPY.Open: Opening price of the week on Monday
+3. SPY.High: Highest price during the week
+4. SPY.Low: Lowest price during the week
+5. SPY.Close: Closing price of the week on Friday, adjusted for splits
+6. SPY.Volume: Volume traded during the week
+7. SPY.Adjusted: Closing price of the week, adjusted for splits and dividends
+
+If we want returns to be similar to the S&P 500 Index, the unadjusted closing price should be used since the index does not give the total return, which includes dividends. Accounting for dividends would reduce losses during bad times and increase gains during good times, which does not reflect the week-to-week movement of the index. Since the purpose of the project is to predict U.S. stock market, unadjusted closing price is used.
+
+Plot of SPY over the years:
+
+```{r plot price data of SPY}
+spy_close <- spy_price[,"SPY.Close"]
+
+plot(spy_close, main = "SPY Weekly Closing Price")
+```
+
+Since this is a time series analysis, we should also check for stationarity of our data. The chart shows that the series is not stationary and it can be checked with the Augmented Dickey Fuller and KPSS Tests.
+
+```{r check for stationarity in SPY price}
+# Add deterministic trend to tests since the chart seems to show it
+
+spy_close %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
+
+spy_close %>% urca::ur.kpss(type = "tau", lags = "long") %>% summary()
+```
+
+ADF test is unable to reject the null hypothesis which claimed that there is unit root (-1.90 vs -3.41, left-tailed test) and KPSS test rejected the null hypothesis which claimed that it is stationary (1.02 vs 0.146). I did the tests again with the weekly returns calculated from the unadjusted closing price using the simple/discrete method.
+
+```{r calculate discrete returns and check stationarity}
+# Calculate discrete returns, na.omit to remove first row of observations
+returns_spy <- na.omit(Return.calculate(prices = spy_close, method = "discrete"))
+
+nrow(returns_spy)
+
+plot(returns_spy, main = "SPY Weekly Returns")
+  
+returns_spy %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+returns_spy %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+With the discrete returns, ADF test rejects the null hypothesis (-24.31 vs -2.86) and KPSS test is unable to reject the null (0.31 vs 0.463). The return series, which is simply the first difference of the price data, is stationary.
+
+### 3.2 2/10-Year Treasury Yield Spread
+
+The yield spread is the difference between the 2-year and 10-year treasury bonds, and is watched by many professionals as an early indicator of stock market downturns when the spread turns negative. This is because longer-dated bonds should have higher yields than bonds with shorter durations, so it is normal when the 10-year treasury yield is above the 2-year treasury yield. However, if the 2-year yield is higher than the 10-year yield, we have an inverted yield curve which signals that investors expect long-term interest rates to fall. This means that the yield spread and the S&P 500 should be negatively correlated.
+
+I have downloaded and stored the data into the object `yield_spread`.
+
+```{r retrieve and store yield spread data}
+# Retrieve 2/10Y Treasury Yield Spread from St. Louis Fed's FRED using quantmod package
+
+yield_spread <- getSymbols(Symbols = "T10Y2Y", src = "FRED", auto.assign = F, from = startdate, to = enddate, periodicity = "weekly")
+
+head(yield_spread); tail(yield_spread)
+```
+
+The data retrieved from FRED was not automatically converted by the **`quantmod`** package to weekly data, as compared to the SPY ETF data retrieved from Yahoo Finance. Furthermore, the **`from`** and **`to`** arguments does not work when retrieving FRED data. I manually adjusted this to match the SPY price data output above.
+
+```{r adjusting yield spread data}
+# First, adjust data collected to start from 2000 and end in 2022
+
+yield_spread <- yield_spread["2000/",]
+
+# Second, change daily frequency to weekly frequency (since SPY closing price is Friday, we extract Friday data)
+
+# Indicate week_start = 1 for week to start on Monday
+yield_spread <- yield_spread[wday(yield_spread, week_start = 1) == 5]
+
+# Third, adjust dates since second step will 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## References
+
+https://www.investopedia.com/terms/s/sp500.asp
+
+https://www.investopedia.com/terms/i/invertedyieldcurve.asp
+
+Federal Reserve Bank of St. Louis, 10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity [T10Y2Y], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/T10Y2Y, July 15, 2022.
+
