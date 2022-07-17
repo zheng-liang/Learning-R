@@ -32,7 +32,7 @@ library(urca) # For unit root tests
 
 ## 3 Description of Variables
 
-In this section, I briefly described the four variables that were used in the project and their expected univariate relationship with the returns of S&P500. I would be using the weekly data of each variable since data for Initial Jobless Claims is released weekly.
+In this section, I briefly described the four variables that were used in the project and their expected univariate relationship with the S&P 500. I would be using the weekly data of each variable since data for Initial Jobless Claims is released weekly.
 
 ### 3.1 SPDR S&P 500 ETF
 
@@ -44,8 +44,8 @@ I have downloaded and stored the data into the object `spy_price`.
 # Retrieve SPY historical data from Yahoo Finance using quantmod package
 
 # Set start and end date for data retrieval
-startdate <- as.Date("2000-01-01")
-enddate <- as.Date("2022-07-01")
+startdate <- as.Date("2000-01-03") # First trading day of year 2000
+enddate <- as.Date("2022-07-01") 
 
 spy_price <- getSymbols(Symbols = "SPY", 
                         src = "yahoo", 
@@ -61,19 +61,20 @@ nrow(spy_price)
 
 # Check for missing data
 colSums(is.na(spy_price))
+
 ```
 
 The dates can be a little misleading when downloading weekly data but here is what each column refers to:
 
-1. Date: Week starts with Saturday and ends with Friday, data recorded on Saturday
+1. Date: Date of the observation, set as Monday (first trading day of year 2000)
 2. SPY.Open: Opening price of the week on Monday
 3. SPY.High: Highest price during the week
 4. SPY.Low: Lowest price during the week
-5. SPY.Close: Closing price of the week on Friday, adjusted for splits
-6. SPY.Volume: Volume traded during the week
-7. SPY.Adjusted: Closing price of the week, adjusted for splits and dividends
+5. SPY.Close: Closing price of the week on Friday (except last observation which is last trading day of June 2022), adjusted for splits
+6. SPY.Volume: Total volume traded during the week
+7. SPY.Adjusted: Closing price of the week (except last observation which is last trading day of June 2022), adjusted for splits and dividends
 
-If we want returns to be similar to the S&P 500 Index, the unadjusted closing price should be used since the index does not give the total return, which includes dividends. Accounting for dividends would reduce losses during bad times and increase gains during good times, which does not reflect the week-to-week movement of the index. Since the purpose of the project is to predict U.S. stock market, unadjusted closing price is used.
+If we want returns to be similar to the S&P 500 Index, the unadjusted closing price should be used since the index does not give the total return which includes dividends. Accounting for dividends would reduce losses during bad times and increase gains during good times, which does not reflect the week-to-week movement of the index. Since the purpose of the project is to predict U.S. stock market, unadjusted closing price is used.
 
 Plot of SPY over the years:
 
@@ -85,7 +86,7 @@ plot(spy_close, main = "SPY Weekly Closing Price")
 
 Since this is a time series analysis, we should also check for stationarity of our data. The chart shows that the series is not stationary and it can be checked with the Augmented Dickey Fuller and KPSS Tests.
 
-```{r check for stationarity in SPY price}
+```{r check for stationarity of SPY price}
 # Add deterministic trend to tests since the chart seems to show it
 
 spy_close %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
@@ -96,7 +97,7 @@ spy_close %>% urca::ur.kpss(type = "tau", lags = "long") %>% summary()
 ADF test is unable to reject the null hypothesis which claimed that there is unit root (-1.90 vs -3.41, left-tailed test) and KPSS test rejected the null hypothesis which claimed that it is stationary (1.02 vs 0.146). I did the tests again with the weekly returns calculated from the unadjusted closing price using the simple/discrete method.
 
 ```{r calculate discrete returns and check stationarity}
-# Calculate discrete returns, na.omit to remove first row of observations
+# Calculate discrete returns, na.omit to remove first observation since it will return NA
 returns_spy <- na.omit(Return.calculate(prices = spy_close, method = "discrete"))
 
 nrow(returns_spy)
@@ -110,34 +111,196 @@ returns_spy %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
 
 With the discrete returns, ADF test rejects the null hypothesis (-24.31 vs -2.86) and KPSS test is unable to reject the null (0.31 vs 0.463). The return series, which is simply the first difference of the price data, is stationary.
 
-### 3.2 2/10-Year Treasury Yield Spread
+### 3.2 10Y/2Y Treasury Yield Spread
 
 The yield spread is the difference between the 2-year and 10-year treasury bonds, and is watched by many professionals as an early indicator of stock market downturns when the spread turns negative. This is because longer-dated bonds should have higher yields than bonds with shorter durations, so it is normal when the 10-year treasury yield is above the 2-year treasury yield. However, if the 2-year yield is higher than the 10-year yield, we have an inverted yield curve which signals that investors expect long-term interest rates to fall. This means that the yield spread and the S&P 500 should be negatively correlated.
 
-I have downloaded and stored the data into the object `yield_spread`.
+I have downloaded and stored the yield spread data into the object `tys`.
 
 ```{r retrieve and store yield spread data}
-# Retrieve 2/10Y Treasury Yield Spread from St. Louis Fed's FRED using quantmod package
+# Retrieve 10Y/2Y Treasury Yield Spread from St. Louis Fed's FRED using quantmod package
 
-yield_spread <- getSymbols(Symbols = "T10Y2Y", src = "FRED", auto.assign = F, from = startdate, to = enddate, periodicity = "weekly")
+tys <- getSymbols(Symbols = "T10Y2Y", src = "FRED", auto.assign = F, from = startdate, to = enddate, periodicity = "weekly")
 
-head(yield_spread); tail(yield_spread)
+head(tys); tail(tys)
 ```
 
 The data retrieved from FRED was not automatically converted by the **`quantmod`** package to weekly data, as compared to the SPY ETF data retrieved from Yahoo Finance. Furthermore, the **`from`** and **`to`** arguments does not work when retrieving FRED data. I manually adjusted this to match the SPY price data output above.
 
 ```{r adjusting yield spread data}
-# First, adjust data collected to start from 2000 and end in 2022
+# 1. Adjust data collected to start from 2000 and end in 2022
 
-yield_spread <- yield_spread["2000/",]
+tys <- tys["2000/2022-06",]
 
-# Second, change daily frequency to weekly frequency (since SPY closing price is Friday, we extract Friday data)
+# 2. Check for missing data. Replace NAs with prior observation.
+
+sum(is.na(tys))
+clean_tys <- na.locf(object = tys)
+
+# 3. Change daily frequency to weekly frequency (since SPY closing price is Friday, we extract Friday data)
+# But last observation in closing price is the last trading day of June 2022, so remember to add that in
 
 # Indicate week_start = 1 for week to start on Monday
-yield_spread <- yield_spread[wday(yield_spread, week_start = 1) == 5]
+weekly_tys <- rbind(clean_tys[wday(clean_tys, week_start = 1) == 5], last(clean_tys))
 
-# Third, adjust dates since second step will 
+# Third, adjust dates since second step will return dates on Friday
+
+index(weekly_tys) <- index(spy_close)
+
+head(weekly_tys); tail(weekly_tys); nrow(weekly_tys)
 ```
+
+Plot SPY Closing Price and 10Y/2Y Treasury Yield Spread over time: 
+
+```{r plot SPY price and yield spread}
+plot(merge(spy_close, weekly_tys), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and 10Y/2Y Treasury Yield Spread")
+```
+
+We can see that the yield spread is negative before the stock market collapsed in the early 2000s and in 2008/2009, and the spread peaked around the bottom of the stock market. The yield spread does not seem to be stationary.
+
+```{r stationarity of yield spread}
+weekly_tys %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+weekly_tys %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+ADF test shows that we cannot reject the null hypothesis (-1.43 vs -2.86), so unit root is present in the series. KPSS test shows that the null hypothesis is rejected (0.52 vs 0.463), so the series is not stationary.
+
+Since the yield spread is stated in percentage, I would simply take the first difference which would refer to the week-to-week changes in yield spread.
+
+```{r calculate first diff of yield spread and test for stationarity}
+# Remove first observation since it will return NA after taking first difference
+diff_tys <- na.omit(diff(x = weekly_tys, lag = 1, differences = 1))
+
+nrow(diff_tys)
+
+plot(diff_tys, main = "First-Difference of 10Y/2Y Treasury Yield Spread")
+  
+diff_tys %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+diff_tys %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+After taking first difference, the number of observations is the same as `returns_spy`, and ADF and KPSS test show that the series is stationary.
+
+### 3.3 CBOE Volatility Index
+
+The CBOE Volatility Index, commonly known as VIX, is used to assess volatility of the S&P 500 Index. A higher VIX value would mean greater fear and uncertainty in the market.
+
+The VIX data is stored into `vix`.
+
+```{r retrieve and store VIX data}
+# Retrieve VIX from FRED, adjustment of data is similar to the yield spread
+
+vix <- getSymbols(Symbols = "VIXCLS", src = "FRED", auto.assign = F)
+
+vix <- vix["2000/2022-06",]
+
+# Check for missing data and replace with prior observation
+sum(is.na(vix))
+clean_vix <- na.locf(object = vix)
+
+weekly_vix <- rbind(clean_vix[wday(clean_vix, week_start = 1) == 5], last(clean_vix))
+
+index(weekly_vix) <- index(spy_close)
+
+head(weekly_vix); tail(weekly_vix); nrow(weekly_vix)
+```
+
+Plot SPY Closing Price and VIX over time: 
+
+```{r plot SPY price and VIX}
+plot(merge(spy_close, weekly_vix), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and VIX")
+```
+
+The chart shows that VIX is higher during stock market crashes, and tends to be around 10 to 30 when the stock market is growing (2004-2007 and 2013-2019). The correlation between VIX and S&P 500 is expected to be negative.
+
+Check for stationarity of VIX series:
+
+```{r stationarity of VIX}
+weekly_vix %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+weekly_vix %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+Based on the ADF and KPSS tests, the VIX series at level is stationary with a drift.
+
+### 3.4 U.S. Initial Jobless Claims
+
+The U.S. Initial Jobless Claims is a weekly economic data measuring the number of people filing for unemployment claims for the first time in the past week. A growth in initial jobless claims is typically seen just before and during a recession, and gradually decline as the economy recovers.
+
+I stored the data into `ijc`.
+
+```{r retrieve and store initial jobless claims data}
+# Retrieve initial jobless claims from FRED, adjustment of data is similar to the yield spread
+
+ijc <- getSymbols(Symbols = "ICSA", src = "FRED", auto.assign = F)
+
+ijc <- ijc["2000/2022-06",]
+
+# Check for missing data
+sum(is.na(ijc))
+
+nrow(ijc) 
+
+# Initial Jobless Claims is weekly data, but adjust the dates so that it can be plotted
+# and merged into same object with other data later.
+index(ijc) <- index(spy_close)
+
+head(ijc); tail(ijc)
+```
+
+Plot SPY Closing Price and Initial Jobless Claims over time: 
+
+```{r plot SPY price and VIX}
+plot(merge(spy_close, ijc), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and Initial Jobless Claims")
+```
+
+Due to the COVID-19 pandemic beginning in early 2020, there was an influx of initial unemployment claims that caused the historical patterns of claims to look flat. Such an increase in numbers may affect the estimated models.
+
+```{r SPY and VIX before 2020}
+plot(merge(spy_close, ijc)["/2019",], multi.panel = T, yaxis.same = F, main = "SPY and Initial Jobless Claims Before 2020")
+```
+
+The chart of SPY and Initial Jobless Claims before 2020 shows unemployment claims is high during the stock market crashes in early 2000s and in 2008/2009. This makes sense, and we expect the unemployment claims to be negatively correlated with the S&P 500.
+
+To check for stationarity in the series, I only used data before 2020 since the extremely high unemployment claims during the COVID-19 pandemic will likely cause the series to be tested as stationary even when it is not.
+
+```{r stationarity of initial jobless claims}
+ijc["/2019",] %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+ijc["/2019",] %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+The ADF test tells us that the null hypothesis cannot be rejected (-2.18 vs -2.86) and KPSS test tells us that the null hypothesis is rejected (1.51 vs 0.463). Therefore, the series is not stationary at levels.
+
+I conducted the ADF and KPSS tests on the growth in initial jobless claims, which is the first-difference of the series.
+
+```{r calculate growth of ijc and check for stationarity}
+# Take difference of data at time t and t-1 and divide by data at time t-1
+# Gives us the growth in initial jobless claims (in decimal format)
+# Remove first observation since it will return NA 
+ijc_growth <- diff(x = ijc, lag = 1, differences = 1) / stats::lag(x = ijc, k = 1)[-1,]
+
+head(ijc_growth)
+
+nrow(ijc_growth)
+
+ijc_growth["/2019",] %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+ijc_growth["/2019",] %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+The ADF and KPSS tests show that the growth rate in initial jobless claims is stationary.
+
+### 3.5 Summary
+
+To summarize what had been done in this section, I discussed how the yield spread, the VIX and initial jobless claims would correlate with the S&P 500. I also carried out the ADF and KPSS tests and found that only the VIX is stationary at levels, while the other three variables are stationary at first difference. Understanding the order of integration allows us to find out if we should test for cointegration, which is not needed unless we are are only estimating the effects of the yield spread and initial jobless claims on the S&P 500.
+
+## 4 Building the Regression Models
+
+
+
 
 
 
@@ -158,5 +321,9 @@ https://www.investopedia.com/terms/s/sp500.asp
 
 https://www.investopedia.com/terms/i/invertedyieldcurve.asp
 
+Chicago Board Options Exchange, CBOE Volatility Index: VIX [VIXCLS], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/VIXCLS, July 16, 2022.
+
 Federal Reserve Bank of St. Louis, 10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity [T10Y2Y], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/T10Y2Y, July 15, 2022.
+
+U.S. Employment and Training Administration, Initial Claims [ICSA], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/ICSA, July 15, 2022.
 
