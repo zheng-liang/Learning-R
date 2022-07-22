@@ -587,7 +587,9 @@ names(results) <- colnames(ptfor)
 results
 ```
 
-Based on the calculated accuracy measures, model 4 (ARMA with DSPI and CLI as external regressors, without seasonal dummies) performed best on out-of-sample forecasting. The caveat is I had used the actual data of DSPI and CLI for forecasting CPI. However, real-world forecasting would require models to forecast these variables either separately or jointly, using an ARMA model or VAR model for example, or to use expert forecast/opinion. These would add to the uncertainty to forecasting and would definitely decrease accuracy of the models.
+Based on the calculated accuracy measures, model 4 (ARMA with DSPI and CLI as external regressors, without seasonal dummies) performed best on out-of-sample forecasting. The caveat is I had used the actual data of DSPI and CLI for forecasting CPI. Real-world forecasting would require models to forecast these variables either separately or jointly, using an ARMA model or VAR model for example, or to use expert forecast/opinion. These would add to the uncertainty to forecasting and would definitely decrease accuracy of the models.
+
+Seasonal differencing in model 2 (SARIMA) yield better forecasting performance and seasonal dummies in model 3 (ARMA with seasonal dummies as external regressors) had worse performance compared to model 1(standard ARIMA). However, model 5 (ARMA with DSPI, CLI and seasonal dummies as external regressors) had better performance than model 6 (SARMA with DSPI and CLI as external regressors). More work is required to find out why there is such a difference between model 2 and 3 versus model 5 and 6.
 
 ## 7 Final Remarks
 
