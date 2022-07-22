@@ -1,0 +1,600 @@
+---
+title: "Effects of Seasonality in Forecasting Singapore's Consumer Price Index"
+author: "TAN Zheng Liang"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+In the project "[Forecasting Singapore CPI Using Different Time Series Models](https://tinyurl.com/bdzrkdsu)", I mentioned that I had ignored the effects of seasonality when estimating the current Consumer Price Index (CPI) of Singapore. In reality, seasonal patterns can be found in many different types of data, such as the total number of air passengers in a month over different seasons and monthly business activity during festive seasons. Accounting for such patterns may help to improve estimation of a variable using different models.
+
+The project uses Autoregressive (Integrated) Moving Average models or AR(I)MA, seasonal ARIMA or SARIMA, as well as ARIMA/SARIMA with exogenous regressors (ARIMAX/SARIMAX) to estimate CPI at time $t$.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+# Use install.packages("packagename") if they are not already installed
+
+# Packages that will be needed for obtaining data via an API
+library(httr)
+library(jsonlite)
+
+# Packages that will be needed for the main parts of the project
+library(corrplot) # For visualizing correlation between variables
+library(foreach) # Foreach loops
+library(forecast) # For ARIMA models, forecasting and evaluation
+library(tidyverse) # For ggplot2 and dplyr
+library(zoo) # For converting data to and working with zoo objects
+```
+
+## 3 Importing Data
+
+The data used in this project is the same as the previous project. I imported the data from the Department of Statistics Singapore using an API and did the necessary data cleaning and manipulation. For a detailed explanation of how to import data using API and the data cleaning procedures, please see Section 3 and 4 of the previous project.
+
+```{r import CPI data}
+# Import Singapore Monthly Consumer Price Index 
+
+cpi_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M212881?isTestApi=true&seriesNoORrowNo=1"
+
+raw_cpi <- httr::GET(url = cpi_url)
+
+cpi_content <- jsonlite::fromJSON(rawToChar(raw_cpi$content))
+
+cpi_data <- as.data.frame(cpi_content$Data$row$columns[[1]])
+
+# order.by argument helps to sort the data in time ascending order
+cpi <- zoo(x = cpi_data$value, order.by = as.yearmon(cpi_data$key, format = "%Y %b"))
+
+# Values are of class "character", need to change them to numeric 
+storage.mode(cpi) <- "numeric"
+
+head(cpi); tail(cpi)
+```
+
+```{r import DSPI data}
+# Import Singapore Monthly Domestic Supply Price Index
+
+dspi_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M212701?isTestApi=true&seriesNoORrowNo=1"
+
+raw_dspi <- httr::GET(url = dspi_url)
+
+dspi_content <- jsonlite::fromJSON(rawToChar(raw_dspi$content))
+
+dspi_data <- as.data.frame(dspi_content$Data$row$columns[[1]])
+
+dspi <- zoo(x = dspi_data$value, order.by = as.yearmon(dspi_data$key, format = "%Y  %b"))
+
+storage.mode(dspi) <- "numeric"
+
+head(dspi); tail(dspi)
+```
+
+```{r import CLI data}
+# Import Singapore Quarterly Composite Leading Index
+
+cli_url <- "https://tablebuilder.singstat.gov.sg/api/table/tabledata/M240421?isTestApi=true"
+
+raw_cli <- httr::GET(url = cli_url)
+
+cli_content <- jsonlite::fromJSON(rawToChar(raw_cli$content))
+
+cli_data <- as.data.frame(cli_content$Data$row$columns[[1]])
+
+cli <- zoo(x = cli_data$value, order.by = as.yearqtr(cli_data$key, format = "%Y %q"))
+
+storage.mode(cli) <- "numeric"
+
+head(cli); tail(cli)
+```
+
+## 4 Exploratory Data Analysis
+
+In this section, I used some plots to visualize if there are any seasonal patterns in the CPI, DSPI and CLI data. Before that, I will need to create quarterly CPI and DSPI data from the monthly data and match the start and end periods of CLI since it has the lowest frequency and observations.
+
+```{r quarterly CPI and DSPI data}
+# Aggregate monthly data to quarterly data using mean value of the months in a quarter
+
+cpi_q <- aggregate(cpi, as.yearqtr, mean)
+
+dspi_q <- aggregate(dspi, as.yearqtr, mean)
+
+# Adjust the sample size to match CLI data
+
+cpi_q <- window(x = cpi_q, start = start(cli), end = end(cli))
+
+head(cpi_q); tail(cpi_q)
+
+dspi_q <- window(x = dspi_q, start = start(cli), end = end(cli))
+
+head(dspi_q); tail(dspi_q)
+```
+
+Merge data into a single object:
+
+```{r merge CPI DSPI and CLI}
+dat <- cbind(CPI = cpi_q, DSPI = dspi_q, CLI = cli)
+
+head(dat); dim(dat)
+```
+
+To create a boxplot of grouped by the quarters, I would use the first-differenced data. This is because the CPI, DSPI and CLI series at level is not stationary and the boxplots I had plotted in my previous project is very likely to be erroneous. Furthermore, I would group the plots by several decades, starting from 1978Q1-1987Q4 and ending with 2008Q1-2017Q4, since the trends/patterns may vary across years.
+
+Take first-difference on level data:
+
+```{r difference data}
+diff_dat <- diff(x = dat, lag = 1, differences = 1) %>% 
+  `colnames<-`(c("dCPI", "dDSPI", "dCLI"))
+
+head(diff_dat); dim(diff_dat)
+```
+
+Plot level and differenced CPI series:
+
+```{r plot of level and differenced CPI, fig.align='center'}
+par(mfrow = c(2, 1))
+
+plot(dat$CPI, main = "Singapore Quarterly CPI from 1978Q1 to 2022Q1", ylab = "CPI")
+
+plot(diff_dat$dCPI, main = "Differenced CPI from 1978Q2 to 2022Q1", ylab = "dCPI")
+```
+
+Boxplot showing range of differenced CPI values in different quarters across different years:
+
+```{r visually check for seasonality in dCPI, fig.align='center'}
+startdates = c("1978Q1", "1988Q1", "1998Q1", "2008Q1")
+enddates = c("1987Q4", "1997Q4", "2007Q4", "2017Q4")
+
+par(mfrow = c(2, 2))
+
+invisible(
+foreach(i = startdates, j = enddates) %do% {
+  
+  boxplot(window(x = diff_dat$dCPI, start = i, end = j) ~ cycle(window(x = diff_dat$dCPI, start = i, end = j)),
+          ylab = "Quarterly dCPI", xlab = "Quarters",
+          main = paste(i, "to", j, sep = " "))
+  
+}
+)
+```
+
+In each of the plot, we can see varying median values of differenced CPI in different quarters, which might indicate that seasonality is present in the CPI series. The seasonal patterns were also not constant, which can be seen by comparing the different plots. 
+
+## 5 Model Selection
+
+To add the effects of seasonality into the models, I would use seasonal differencing or seasonal dummies and test how they differ. For seasonal dummies, I would need to create $k - 1$ columns of dummy variables representing the different quarters.
+
+Create dummy variables for quarters:
+
+```{r create dummy variables}
+sdum <- zoo(forecast::seasonaldummy(x = as.ts(diff_dat)), order.by = index(diff_dat))
+
+diff_dat <- merge(diff_dat, sdum)
+
+head(diff_dat); tail(diff_dat)
+```
+
+Before estimating the models, I would split the data into training and testing sets, with the training set containing data up to end-2020 and leave the rest for testing.
+
+```{r train and test dataset}
+train <- window(x = diff_dat, end = "2020 Q4")
+
+test <- window(x = diff_dat, start = "2021 Q1")
+
+dim(train); dim(test)
+```
+
+### 5.1 Autoregressive (Integrated) Moving Average Model
+
+The ARIMA model is the simplest time series model, where it uses the lags of itself and the lags of the error terms. An $ARIMA(p, d, q)$ model has three components/parameters, $p$ is the number of AR lags, $q$ is the number of MA lags, and $d$ is the number of differencing required to achieve stationarity in the series.
+
+Looking at the autocorrelation and partial autocorrelation plots can help us guess the lags of the AR and MA terms.
+
+```{r ARMA model, fig.align='center'}
+train$dCPI %>% tsdisplay(main = "ACF and PACF of dCPI")
+
+# From the PACF, we might use 1 or 2 AR lags. From the ACF, we might use up to 4 MA lags
+
+mod1 <- forecast::auto.arima(y = train$dCPI,
+                             max.p = 4, max.q = 4, 
+                             seasonal = F, ic = "aic", 
+                             stepwise = F, approximation = F, trace = F)
+
+mod1
+
+checkresiduals(object = mod1)
+```
+
+The estimated model is:
+
+$$
+\widehat{CPI}_t = 0.62 - 0.88 CPI_{t-1} + 1.34 u_{t-1} + 0.63 u_{t-2} + 0.36 u_{t-3} + 0.24 u_{t-4}
+$$
+
+The Ljung-Box test shows that the errors are not serially correlated (we do not reject the null based on p-value of 0.14)
+
+Plot fitted dCPI of ARMA model and actual dCPI:
+
+```{r plot fitted values of ARMA model and actual values, fig.align='center'}
+plot(train$dCPI, 
+     type = "l", lwd = 2, col = "black", 
+     ylab = "Quarterly dCPI", xlab = "Year", 
+     main = "Fitted dCPI from ARMA Model")
+
+lines(zoo(x = mod1$fitted, order.by = index(train)), 
+      type = "l", lwd = 2, col = "red")
+
+legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
+```
+
+### 5.2 Seasonal ARMA Model
+
+The SARMA model adds in seasonal components by seasonal differencing and/or using seasonal lags of AR and MA terms, which is similar to a standard ARMA model.
+
+The model can be written as SARIMA(p, d, q)(P, D, Q)s, where the additional P and Q are the seasonal lags of AR and MA terms, D is the seasonal difference, and s is the seasonal frequency (monthly = 12, quarterly = 4, etc.). 
+
+The ACF and PACF plots of dCPI in Section 5.1 shows significant spikes at lag 4 and 8 in the ACF plot and significant spike at lag 8 in the PACF plot. This would indicate possibility of seasonal components in the data.
+
+```{r SARMA model}
+mod2 <- forecast::auto.arima(y = train$dCPI, 
+                             max.p = 4, max.q = 4, 
+                             seasonal = T, ic = "aic", 
+                             stepwise = F, approximation = F, trace = F)
+
+mod2
+
+checkresiduals(object = mod2, plot = F)
+```
+
+There is no seasonal differencing, but there are seasonal lags added to the model. The estimated model is:
+
+$$
+\widehat{CPI}_t = 0.05 + 0.49 CPI_{t-1} + 0.98 CPI_{t-4} - 0.64 CPI_{t-8} - 0.93 u_{t-4} + 0.83 u_{t-8}
+$$
+
+The Ljung-Box test shows that the errors are serially correlated (we reject the null based on p-value of 0.01)
+
+Plot fitted dCPI of SARMA model and actual dCPI:
+
+```{r plot fitted values of SARMA model and actual values, fig.align='center'}
+plot(train$dCPI, 
+     type = "l", lwd = 2, col = "black", 
+     ylab = "Quarterly dCPI", xlab = "Year",
+     main = "Fitted dCPI from SARMA Model")
+
+lines(zoo(x = mod2$fitted, order.by = index(train)), 
+      type = "l", lwd = 2, col = "red")
+
+legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
+```
+
+### 5.3 ARMA Model with Seasonal Dummies
+
+Another way we can include seasonal effects is to add seasonal dummies to the models. The seasonal dummies are called exogenous regressors, and adding them to an ARMA model forms the ARMAX model. According to Hyndman (2010), the coefficient of the exogenous regressors cannot be interpreted as the effect on $y_t$ when $x_t$ changes, as it is conditional on the lags of the dependent variable. He suggested using ARMA errors instead, which allows the coefficients of exogenous regressors to be interpreted normally, which is implemented by the **`forecast`** package when the **`xreg`** argument is used.
+
+```{r ARMA model with seasonal dummies}
+mod3 <- forecast::auto.arima(y = train$dCPI, 
+                             max.p = 4, max.q = 4,
+                             seasonal = F, ic = "aic", 
+                             stepwise = F, approximation = F, trace = F,
+                             xreg = train[, 4:6])
+
+mod3
+
+checkresiduals(object = mod3, plot = F)
+```
+
+The estimated model is:
+
+$$
+\widehat{CPI}_t = 0.29 + 0.02(Q1) - 0.06(Q2) + 0.19(Q3) + \eta_t \\
+\eta_t = 0.68\eta_{t-1} - 0.25u_{t-1} + u_t
+$$
+
+Based on the estimated model, Quarters 1 and 3 generally has higher dCPI, while Quarter 2 generally has lower dCPI compared to Quarter 4 (base equation), ceteris paribus. 
+
+Plot fitted dCPI of ARMA model with seasonal dummies and actual dCPI:
+
+```{r plot fitted values of ARMA model with seasonal dummies and actual values, fig.align='center'}
+plot(train$dCPI, 
+     type = "l", lwd = 2, col = "black", 
+     ylab = "Quarterly dCPI", xlab = "Year",
+     main = "Fitted dCPI from ARMA Model with Seasonal Dummies")
+
+lines(zoo(x = mod3$fitted, order.by = index(train)), 
+      type = "l", lwd = 2, col = "red")
+
+legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
+```
+
+### 5.4 (S)ARMA Model with Exogenous Variables
+
+The (S)ARMAX model, which was already shown above using seasonal dummies, can include other variables that are exogenous factors of CPI. For this, I assumed that DSPI and CLI are external factors that affect CPI. 
+
+I would compare three different ARMAX models: one without including seasonal dummies, one including seasonal dummies and one using SARMA without seasonal dummies.
+
+Estimate ARMAX model without seasonal dummies:
+
+```{r ARMAX model without seasonal dummies, fig.align='center'}
+mod4 <- forecast::auto.arima(y = train$dCPI, 
+                             max.p = 4, max.q = 4,
+                             seasonal = F, ic = "aic", 
+                             stepwise = F, approximation = F, trace = F,
+                             xreg = train[, 2:3])
+
+mod4
+
+checkresiduals(object = mod4, plot = F)
+```
+
+$$
+\widehat{CPI}_t = 0.35 + 0.04(dDSPI) - 0.05(dCLI) + \eta_t \\
+\eta_t = 0.77\eta_{t-1} - 0.46u_{t-1} + u_t
+$$
+
+```{r plot fitted values of ARMAX model without seasonal dummies and actual values, fig.align='center'}
+plot(train$dCPI, 
+     type = "l", lwd = 2, col = "black", 
+     ylab = "Quarterly dCPI", xlab = "Year",
+     main = "Fitted dCPI from ARMAX Model without Seasonal Dummies")
+
+lines(zoo(x = mod4$fitted, order.by = index(train)), 
+      type = "l", lwd = 2, col = "red")
+
+legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
+```
+
+Estimate ARMAX model with seasonal dummies:
+
+```{r ARMAX model with seasonal dummies}
+mod5 <- forecast::auto.arima(y = train$dCPI, 
+                             max.p = 4, max.q = 4,
+                             seasonal = F, ic = "aic", 
+                             stepwise = F, approximation = F, trace = F,
+                             xreg = train[, 2:6])
+
+mod5
+
+checkresiduals(object = mod5, plot = F)
+```
+
+$$
+\widehat{CPI}_t = 0.33 + 0.04(dDSPI) - 0.05(dCLI) + 0.01(Q1) - 0.10(Q2) + 0.16(Q3) + \eta_t \\
+\eta_t = 0.74\eta_{t-1} - 0.37u_{t-1} + u_t
+$$
+
+```{r plot fitted values of ARMAX model with seasonal dummies and actual values, fig.align='center'}
+plot(train$dCPI, 
+     type = "l", lwd = 2, col = "black", 
+     ylab = "Quarterly dCPI", xlab = "Year",
+     main = "Fitted dCPI from ARMAX Model with Seasonal Dummies")
+
+lines(zoo(x = mod5$fitted, order.by = index(train)), 
+      type = "l", lwd = 2, col = "red")
+
+legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
+```
+
+Estimate SARMAX model without seasonal dummies:
+
+```{r SARMAX model}
+mod6 <- forecast::auto.arima(y = train$dCPI, 
+                             max.p = 4, max.q = 4,
+                             seasonal = T, ic = "aic", 
+                             stepwise = F, approximation = F, trace = F,
+                             xreg = train[, 2:3])
+
+mod6
+
+checkresiduals(object = mod6, plot = F)
+```
+
+$$
+\widehat{CPI}_t = 0.35 + 0.04(dDSPI) - 0.05(dCLI) + \eta_t \\
+\eta_t = 0.42\eta_{t-1} + 0.12\eta_{t-4} + 0.23\eta_{t-8} + u_t
+$$
+
+```{r plot fitted values of SARMAX model and actual values, fig.align='center'}
+plot(train$dCPI, 
+     type = "l", lwd = 2, col = "black", 
+     ylab = "Quarterly dCPI", xlab = "Year",
+     main = "Fitted dCPI from SARMAX Model")
+
+lines(zoo(x = mod6$fitted, order.by = index(train)), 
+      type = "l", lwd = 2, col = "red")
+
+legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
+```
+
+## 6 Forecasting and Model Evaluation
+
+In this section, I would forecast and evaluate the out-of-sample performance of the ARMA, SARMA, ARMAX and SARMAX models estimated in Section 5. The forecasts cover the four quarters in 2021 and the first quarter of 2022.
+
+I produced the forecasts of all 5 models and plotted the forecasted and actual CPI series at levels before evaluating the models' performance and accuracy using the actual out-of-sample CPI at level. It uses the **`forecast`** and **`accuracy`** functions in the **`forecast`** package.
+
+### 6.1 ARMA Model
+
+```{r forecast using ARMA model, fig.align='center'}
+f_mod1 <- forecast(object = mod1, h = 5, level = 95)
+
+merge(`Actual dCPI` = test$dCPI, 
+      as.zoo(cbind(`Point Forecast` = f_mod1$mean, `Lo 95` = f_mod1$lower, `Hi 95` = f_mod1$upper)))
+
+f_mod1.level <- zoo(cbind(fCPI = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod1$mean),
+                          fCPI_lower = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod1$lower),
+                          fCPI_upper = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod1$upper)),
+                    order.by = index(test))
+
+plot(merge(dat$CPI[index(dat) >= "2018 Q1"], f_mod1.level), 
+     type = "l", col = c("black", "red", "gray", "gray"), lwd = 2,
+     ylab = "Quarterly CPI", xlab = "Year", main = "Forecasted CPI Using ARMA Model",
+     plot.type = "single")
+
+legend(x = "topleft", 
+       legend = c("Actual CPI 2018Q1 to 2022Q1", "Forecasted CPI 2021Q1 to 2022Q2", "Lower and Upper Bound"), 
+       col = c("black", "red", "gray"), lwd = 2)
+```
+
+### 6.2 SARMA Model
+
+```{r forecast using SARMA model, fig.align='center'}
+f_mod2 <- forecast(object = mod2, h = 5, level = 95)
+
+merge(`Actual dCPI` = test$dCPI, 
+      as.zoo(cbind(`Point Forecast` = f_mod2$mean, `Lo 95` = f_mod2$lower, `Hi 95` = f_mod2$upper)))
+
+f_mod2.level <- zoo(cbind(fCPI = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod2$mean),
+                          fCPI_lower = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod2$lower),
+                          fCPI_upper = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod2$upper)),
+                    order.by = index(test))
+
+plot(merge(dat$CPI[index(dat) >= "2018 Q1"], f_mod2.level), 
+     type = "l", col = c("black", "red", "gray", "gray"), lwd = 2,
+     ylab = "Quarterly CPI", xlab = "Year", main = "Forecasted CPI Using SARMA Model",
+     plot.type = "single")
+
+legend(x = "topleft", 
+       legend = c("Actual CPI 2018Q1 to 2022Q1", "Forecasted CPI 2021Q1 to 2022Q2", "Lower and Upper Bound"), 
+       col = c("black", "red", "gray"), lwd = 2)
+```
+
+### 6.3 ARMA Model with Seasonal Dummies
+
+```{r forecast using ARMA model with seasonal dummies, fig.align='center'}
+f_mod3 <- forecast(object = mod3, h = 5, level = 95, xreg = test[, 4:6])
+
+merge(`Actual dCPI` = test$dCPI, 
+      as.zoo(cbind(`Point Forecast` = f_mod3$mean, `Lo 95` = f_mod3$lower, `Hi 95` = f_mod3$upper)))
+
+f_mod3.level <- zoo(cbind(fCPI = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod3$mean),
+                          fCPI_lower = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod3$lower),
+                          fCPI_upper = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod3$upper)),
+                    order.by = index(test))
+
+plot(merge(dat$CPI[index(dat) >= "2018 Q1"], f_mod3.level), 
+     type = "l", col = c("black", "red", "gray", "gray"), lwd = 2,
+     ylab = "Quarterly CPI", xlab = "Year", main = "Forecasted CPI Using ARMA Model with Seasonal Dummies",
+     plot.type = "single")
+
+legend(x = "topleft", 
+       legend = c("Actual CPI 2018Q1 to 2022Q1", "Forecasted CPI 2021Q1 to 2022Q2", "Lower and Upper Bound"), 
+       col = c("black", "red", "gray"), lwd = 2)
+```
+
+### 6.4 (S)ARMA Model with Exogenous Variables
+
+Forecasts from ARMAX model without seasonal dummies:
+
+```{r forecast using ARMAX model without seasonal dummies, fig.align='center'}
+f_mod4 <- forecast(object = mod4, h = 5, level = 95, xreg = test[, 2:3])
+
+merge(`Actual dCPI` = test$dCPI, 
+      as.zoo(cbind(`Point Forecast` = f_mod4$mean, `Lo 95` = f_mod4$lower, `Hi 95` = f_mod4$upper)))
+
+f_mod4.level <- zoo(cbind(fCPI = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod4$mean),
+                          fCPI_lower = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod4$lower),
+                          fCPI_upper = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod4$upper)),
+                    order.by = index(test))
+
+plot(merge(dat$CPI[index(dat) >= "2018 Q1"], f_mod4.level), 
+     type = "l", col = c("black", "red", "gray", "gray"), lwd = 2,
+     ylab = "Quarterly CPI", xlab = "Year", main = "Forecasted CPI Using ARMAX Model without Seasonal Dummies",
+     plot.type = "single")
+
+legend(x = "topleft", 
+       legend = c("Actual CPI 2018Q1 to 2022Q1", "Forecasted CPI 2021Q1 to 2022Q2", "Lower and Upper Bound"), 
+       col = c("black", "red", "gray"), lwd = 2)
+```
+
+Forecasts from ARMAX model with seasonal dummies:
+
+```{r forecast using ARMAX model with seasonal dummies, fig.align='center'}
+f_mod5 <- forecast(object = mod5, h = 5, level = 95, xreg = test[, 2:6])
+
+merge(`Actual dCPI` = test$dCPI, 
+      as.zoo(cbind(`Point Forecast` = f_mod5$mean, `Lo 95` = f_mod5$lower, `Hi 95` = f_mod5$upper)))
+
+f_mod5.level <- zoo(cbind(fCPI = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod5$mean),
+                          fCPI_lower = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod5$lower),
+                          fCPI_upper = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod5$upper)),
+                    order.by = index(test))
+
+plot(merge(dat$CPI[index(dat) >= "2018 Q1"], f_mod5.level), 
+     type = "l", col = c("black", "red", "gray", "gray"), lwd = 2,
+     ylab = "Quarterly CPI", xlab = "Year", main = "Forecasted CPI Using ARMAX Model with Seasonal Dummies",
+     plot.type = "single")
+
+legend(x = "topleft", 
+       legend = c("Actual CPI 2018Q1 to 2022Q1", "Forecasted CPI 2021Q1 to 2022Q2", "Lower and Upper Bound"), 
+       col = c("black", "red", "gray"), lwd = 2)
+```
+
+Forecasts from SARMAX model:
+
+```{r forecast using SARMAX model, fig.align='center'}
+f_mod6 <- forecast(object = mod6, h = 5, level = 95, xreg = test[, 2:3])
+
+merge(`Actual dCPI` = test$dCPI, 
+      as.zoo(cbind(`Point Forecast` = f_mod6$mean, `Lo 95` = f_mod6$lower, `Hi 95` = f_mod6$upper)))
+
+f_mod6.level <- zoo(cbind(fCPI = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod6$mean),
+                          fCPI_lower = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod6$lower),
+                          fCPI_upper = as.vector(dat$CPI[index(dat) == "2020 Q4",]) + cumsum(f_mod6$upper)),
+                    order.by = index(test))
+
+plot(merge(dat$CPI[index(dat) >= "2018 Q1"], f_mod6.level), 
+     type = "l", col = c("black", "red", "gray", "gray"), lwd = 2,
+     ylab = "Quarterly CPI", xlab = "Year", main = "Forecasted CPI Using SARMAX Model",
+     plot.type = "single")
+
+legend(x = "topleft", 
+       legend = c("Actual CPI 2018Q1 to 2022Q1", "Forecasted CPI 2021Q1 to 2022Q2", "Lower and Upper Bound"), 
+       col = c("black", "red", "gray"), lwd = 2)
+```
+
+### 6.5 Forecasting Performance of Models
+
+Merge point forecasts to a data frame:
+
+```{r merge point forecasts to data frame}
+ptfor <- cbind(model1 = f_mod1.level$fCPI, 
+               model2 = f_mod2.level$fCPI,
+               model3 = f_mod3.level$fCPI, 
+               model4 = f_mod4.level$fCPI,
+               model5 = f_mod5.level$fCPI, 
+               model6 = f_mod6.level$fCPI)
+
+ptfor
+```
+
+Use for loop to obtain accuracy measures:
+
+```{r forecasting performance of models}
+results <- foreach (i = 1:6) %do% {
+  accuracy(object = as.ts(ptfor[,i]), x = dat$CPI[index(dat) >= "2021 Q1"])
+}
+
+names(results) <- colnames(ptfor)
+
+results
+```
+
+Based on the calculated accuracy measures, model 4 (ARMA with DSPI and CLI as external regressors, without seasonal dummies) performed best on out-of-sample forecasting. The caveat is I had used the actual data of DSPI and CLI for forecasting CPI. However, real-world forecasting would require models to forecast these variables either separately or jointly, using an ARMA model or VAR model for example, or to use expert forecast/opinion. These would add to the uncertainty to forecasting and would definitely decrease accuracy of the models.
+
+## 7 Final Remarks
+
+Although the project set out to test the effects of seasonality on forecasting Singapore's CPI, the model with the better forecasting performance was the one without any seasonal components. The project may not be fully accurate in its estimation, since the mean of the months in a quarter were used, which may or may not have effects on seasonality. This may be an interesting topic to work on next, since I forced quarterly CPI and DSPI to be used, given that CLI was assumed to affect CPI and it had quarterly frequency. The seasonal effects also seemed to change across decades, as seen in the boxplots in Section 4, and accounting for these changes may lead to better models.
+
+## References
+
+Hyndman, R. (2010). The ARIMAX model muddle. Retrieved from https://robjhyndman.com/hyndsight/arimax/
+
+Hyndman, R.J., & Athanasopoulos, G. (2018) *Forecasting: principles and practice*, 2nd edition, OTexts: Melbourne, Australia. Retrieved 20 July 2022, from https://otexts.com/fpp2/.
