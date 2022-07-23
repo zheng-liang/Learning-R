@@ -1,12 +1,14 @@
 ---
 title: "Effects of Seasonality in Forecasting Singapore's Consumer Price Index"
-author: "TAN Zheng Liang"
-date: "`r Sys.Date()`"
+author: "Tan Zheng Liang"
+date: "2022-07-21"
 output:
-  html_document:
-    toc: true
-    toc_float: true
+  html_document: 
+    toc: yes
+    toc_float: yes
     code_folding: show
+    highlight: tango
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +17,7 @@ knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 ## 1 Introduction
 
-In the project "[Forecasting Singapore CPI Using Different Time Series Models](https://tinyurl.com/bdzrkdsu)", I mentioned that I had ignored the effects of seasonality when estimating the current Consumer Price Index (CPI) of Singapore. In reality, seasonal patterns can be found in many different types of data, such as the total number of air passengers in a month over different seasons and monthly business activity during festive seasons. Accounting for such patterns may help to improve estimation of a variable using different models.
+In the project "[Forecasting Singapore CPI Using Different Time Series Models](https://tinyurl.com/yc43wdcw)", I mentioned that I had ignored the effects of seasonality when estimating the current Consumer Price Index (CPI) of Singapore. In reality, seasonal patterns can be found in many different types of data, such as the total number of air passengers in a month over different seasons and monthly business activity during festive seasons. Accounting for such patterns may help to improve estimation of a variable using different models.
 
 The project uses Autoregressive (Integrated) Moving Average models or AR(I)MA, seasonal ARIMA or SARIMA, as well as ARIMA/SARIMA with exogenous regressors (ARIMAX/SARIMAX) to estimate CPI at time $t$.
 
@@ -223,7 +225,7 @@ The Ljung-Box test shows that the errors are not serially correlated (we do not 
 
 Plot fitted dCPI of ARMA model and actual dCPI:
 
-```{r plot fitted values of ARMA model and actual values, fig.align='center'}
+```{r plot fitted ARMA model and actual values, fig.align='center'}
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year", 
@@ -264,7 +266,7 @@ The Ljung-Box test shows that the errors are serially correlated (we reject the 
 
 Plot fitted dCPI of SARMA model and actual dCPI:
 
-```{r plot fitted values of SARMA model and actual values, fig.align='center'}
+```{r plot fitted SARMA model and actual values, fig.align='center'}
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -303,7 +305,7 @@ Based on the estimated model, Quarters 1 and 3 generally has higher dCPI, while 
 
 Plot fitted dCPI of ARMA model with seasonal dummies and actual dCPI:
 
-```{r plot fitted values of ARMA model with seasonal dummies and actual values, fig.align='center'}
+```{r plot fitted ARMA model with seasonal dummies and actual values, fig.align='center'}
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -340,7 +342,7 @@ $$
 \eta_t = 0.77\eta_{t-1} - 0.46u_{t-1} + u_t
 $$
 
-```{r plot fitted values of ARMAX model without seasonal dummies and actual values, fig.align='center'}
+```{r plot fitted ARMAX model without seasonal dummies and actual values, fig.align='center'}
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -371,7 +373,7 @@ $$
 \eta_t = 0.74\eta_{t-1} - 0.37u_{t-1} + u_t
 $$
 
-```{r plot fitted values of ARMAX model with seasonal dummies and actual values, fig.align='center'}
+```{r plot fitted ARMAX model with seasonal dummies and actual values, fig.align='center'}
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -402,7 +404,7 @@ $$
 \eta_t = 0.42\eta_{t-1} + 0.12\eta_{t-4} + 0.23\eta_{t-8} + u_t
 $$
 
-```{r plot fitted values of SARMAX model and actual values, fig.align='center'}
+```{r plot fitted SARMAX model and actual values, fig.align='center'}
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",

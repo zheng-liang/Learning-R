@@ -147,7 +147,7 @@ mod1
 
 checkresiduals(object = mod1)
 
-## ----plot fitted values of ARMA model and actual values, fig.align='center'----
+## ----plot fitted ARMA model and actual values, fig.align='center'-------------
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year", 
@@ -168,7 +168,7 @@ mod2
 
 checkresiduals(object = mod2, plot = F)
 
-## ----plot fitted values of SARMA model and actual values, fig.align='center'----
+## ----plot fitted SARMA model and actual values, fig.align='center'------------
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -190,7 +190,7 @@ mod3
 
 checkresiduals(object = mod3, plot = F)
 
-## ----plot fitted values of ARMA model with seasonal dummies and actual values, fig.align='center'----
+## ----plot fitted ARMA model with seasonal dummies and actual values, fig.align='center'----
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -212,7 +212,7 @@ mod4
 
 checkresiduals(object = mod4, plot = F)
 
-## ----plot fitted values of ARMAX model without seasonal dummies and actual values, fig.align='center'----
+## ----plot fitted ARMAX model without seasonal dummies and actual values, fig.align='center'----
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -234,7 +234,7 @@ mod5
 
 checkresiduals(object = mod5, plot = F)
 
-## ----plot fitted values of ARMAX model with seasonal dummies and actual values, fig.align='center'----
+## ----plot fitted ARMAX model with seasonal dummies and actual values, fig.align='center'----
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
@@ -256,7 +256,7 @@ mod6
 
 checkresiduals(object = mod6, plot = F)
 
-## ----plot fitted values of SARMAX model and actual values, fig.align='center'----
+## ----plot fitted SARMAX model and actual values, fig.align='center'-----------
 plot(train$dCPI, 
      type = "l", lwd = 2, col = "black", 
      ylab = "Quarterly dCPI", xlab = "Year",
