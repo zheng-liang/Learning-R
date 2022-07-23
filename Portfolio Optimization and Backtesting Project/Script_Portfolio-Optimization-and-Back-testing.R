@@ -19,9 +19,7 @@ AMZN <- getSymbols(Symbols = "AMZN",
                    auto.assign = F)
 
 ## ----Understanding object-----------------------------------------------------
-head(AMZN, n = 4)
-
-tail(AMZN, n = 4)
+head(AMZN, n = 4); tail(AMZN, n = 4)
 
 colSums(is.na(AMZN))
 
@@ -58,13 +56,9 @@ for (ticker in tickers) {
 colnames(price_data) <- tickers
 
 ## ----Brief details of price_data----------------------------------------------
-head(price_data, n = 4)
+head(price_data, n = 4); tail(price_data, n = 4)
 
-tail(price_data, n = 4)
-
-nrow(price_data)
-
-colSums(is.na(price_data))
+nrow(price_data); colSums(is.na(price_data))
 
 ## ----Daily (discrete) return--------------------------------------------------
 returns <- na.omit(Return.calculate(price_data, method = "discrete"))
@@ -287,7 +281,7 @@ port_MeanVar_qRebal <- optimize.portfolio.rebalancing(returns,
 ## ----Weights, fig.align = 'center'--------------------------------------------
 chart.Weights(port_MeanVar_qRebal)
 
-## ----MeanVar Portfolio Returns------------------------------------------------
+## ----MeanVar Portfolio Returns, warning=FALSE---------------------------------
 w_qOptim <- extractWeights(port_MeanVar_qRebal)
 
 rp_MeanVar <- Return.portfolio(returns, 

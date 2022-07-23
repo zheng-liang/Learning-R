@@ -1,12 +1,16 @@
 ---
 title: 'Basic Portfolio Optimization, Re-balancing and Back-Testing in R'
-author: "zhengliang"
+author: "Tan Zheng Liang"
 date: "`r Sys.Date()`"
 output: 
-  html_document:
-    toc: true
-    toc_float: true
+  html_document: 
+    toc: yes
+    toc_float: yes
     code_folding: show
+    theme: flatly
+    highlight: tango
+    fig_width: 6
+    fig_height: 4
 ---
 
 ```{r setup, include=FALSE}
@@ -17,7 +21,7 @@ knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 Through this project, my intention is to apply what I have learnt in R onto one of the areas that I always had an interest in, which is stock portfolio optimization. It documents the commonly used packages and functions in R that are useful for portfolio analysis and possibly even for back-testing. It is not intended to be a detailed or advanced guide to portfolio theory and R application.
 
-The first part starts off with understanding some basic functions in the relevant packages, which would include importing stock prices from Yahoo Finance to calculating returns and important metrics, such as Beta and Sharpe Ratio. The second part would involve tools that we can use for single-period optimization and optimization with periodic re-balancing.
+The first part starts off with understanding some basic functions in the relevant packages, which would include importing stock prices from Yahoo Finance to calculating returns and important metrics, such as Beta and Sharpe Ratio. The second part would involve tools that we can use for single-period optimization and multi-period optimization with back-testing of portfolio optimization strategy.
 
 # 2 Packages Required
 
@@ -49,9 +53,7 @@ AMZN <- getSymbols(Symbols = "AMZN",
 Let us get some details about the object `AMZN`.
 
 ```{r Understanding object}
-head(AMZN, n = 4)
-
-tail(AMZN, n = 4)
+head(AMZN, n = 4); tail(AMZN, n = 4)
 
 colSums(is.na(AMZN))
 ```
@@ -110,13 +112,9 @@ colnames(price_data) <- tickers
 Let us see some details about the object `price_data`.
 
 ```{r Brief details of price_data}
-head(price_data, n = 4)
+head(price_data, n = 4); tail(price_data, n = 4)
 
-tail(price_data, n = 4)
-
-nrow(price_data)
-
-colSums(is.na(price_data))
+nrow(price_data); colSums(is.na(price_data))
 ```
 
 The **`nrow`** function returns us the number of rows, representing the number of data points of each stock, and **`colSums`** shows us that there are no missing data in any of the columns.
@@ -369,7 +367,7 @@ table.AnnualizedReturns(comparison, 0.03/252, scale = 252)
 
 # 6 Back-Testing Optimization Strategy
 
-Let us create a new portfolio specification that follows the mean-variance portfolio theory for the back-testing.
+Let us create a new portfolio specification for back-testing that follows the mean-variance portfolio theory.
 
 ```{r Adding constrains and objectives 3}
 portspec3 <- portfolio.spec(colnames(returns))
@@ -426,7 +424,7 @@ chart.Weights(port_MeanVar_qRebal)
 
 We can proceed to calculate the portfolio returns using the functions **`Return.portfolio`**.
 
-```{r MeanVar Portfolio Returns}
+```{r MeanVar Portfolio Returns, warning=FALSE}
 w_qOptim <- extractWeights(port_MeanVar_qRebal)
 
 rp_MeanVar <- Return.portfolio(returns, 
@@ -446,4 +444,4 @@ table.AnnualizedReturns(evaluation, Rf=0.03/252)
 
 # 7 Final Remarks
 
-This project serves to apply what I have learnt in R to portfolio optimization. It documents the functions and packages that are used and how to create interesting visualizations of portfolio performance. While optimization and back-testing is a useful and important concept, it is critical to note that past performance of stocks should not be used to indicate future performance. It only serves to test how certain investment strategies performed based on historical data and whether it would suit an investor's preferences.
+This project serves to apply what I have learnt in R to portfolio optimization. It documents the functions and packages that are used and how to create interesting visualizations of portfolio performance. While optimization and back-testing is a useful and important concept, it is critical to note that past performance of stocks should not be used to indicate future performance. It only serves to test how certain investment strategies performed based on historical data and whether it would suit an investor's preference for risk and return.
