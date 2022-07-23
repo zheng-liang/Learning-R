@@ -1,7 +1,7 @@
 ---
 title: 'Basic Portfolio Optimization, Re-balancing and Back-Testing in R'
 author: "Tan Zheng Liang"
-date: "`r Sys.Date()`"
+date: "2022-07-09"
 output: 
   html_document: 
     toc: yes
