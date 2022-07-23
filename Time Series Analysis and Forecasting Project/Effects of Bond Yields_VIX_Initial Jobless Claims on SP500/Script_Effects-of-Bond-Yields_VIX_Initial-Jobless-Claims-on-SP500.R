@@ -34,7 +34,7 @@ nrow(spy_price)
 # Check for missing data
 colSums(is.na(spy_price))
 
-## ----plot price data of SPY---------------------------------------------------
+## ----plot price data of SPY, fig.align='center'-------------------------------
 spy_close <- spy_price[,"SPY.Close"] %>% 
   `colnames<-`("SPY")
 
@@ -47,7 +47,7 @@ spy_close %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
 
 spy_close %>% urca::ur.kpss(type = "tau", lags = "long") %>% summary()
 
-## ----calculate discrete returns and check stationarity------------------------
+## ----calculate discrete returns and check stationarity, fig.align='center'----
 # Calculate discrete returns, na.omit to remove first observation as it will return NA
 returns_spy <- na.omit(diff(x = spy_close, lag = 1, differences = 1) / stats::lag(x = spy_close, k = 1))
 
@@ -89,7 +89,7 @@ index(weekly_tys) <- index(spy_close)
 
 head(weekly_tys); tail(weekly_tys); nrow(weekly_tys)
 
-## ----plot SPY price and yield spread------------------------------------------
+## ----plot SPY price and yield spread, fig.align='center'----------------------
 plot(merge(spy_close, weekly_tys), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and 10Y/2Y Treasury Yield Spread")
 
 ## ----stationarity of yield spread---------------------------------------------
@@ -97,7 +97,7 @@ weekly_tys %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
 
 weekly_tys %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
 
-## ----calculate first diff of yield spread and test for stationarity-----------
+## ----calculate first diff of yield spread and test for stationarity, fig.align='center'----
 # Remove first observation since it will return NA after taking first difference
 diff_tys <- na.omit(diff(x = weekly_tys, lag = 1, differences = 1))
 
@@ -127,7 +127,7 @@ index(weekly_vix) <- index(spy_close)
 
 head(weekly_vix); tail(weekly_vix); nrow(weekly_vix)
 
-## ----plot SPY price and VIX---------------------------------------------------
+## ----plot SPY price and VIX, fig.align='center'-------------------------------
 plot(merge(spy_close, weekly_vix), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and VIX")
 
 ## ----stationarity of VIX------------------------------------------------------
@@ -154,10 +154,10 @@ index(ijc) <- index(spy_close)
 
 head(ijc); tail(ijc)
 
-## ----plot SPY price and IJC---------------------------------------------------
+## ----plot SPY price and IJC, fig.align='center'-------------------------------
 plot(merge(spy_close, ijc), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and Initial Jobless Claims")
 
-## ----SPY and VIX before 2020--------------------------------------------------
+## ----SPY and VIX before 2020, fig.align='center'------------------------------
 plot(merge(spy_close, ijc)["/2019",], multi.panel = T, yaxis.same = F, main = "SPY and Initial Jobless Claims Before 2020")
 
 ## ----stationarity of initial jobless claims-----------------------------------
@@ -179,7 +179,7 @@ ijc_growth["/2019",] %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% sum
 
 ijc_growth["/2019",] %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
 
-## ----correlation heatmaps-----------------------------------------------------
+## ----correlation heatmaps, fig.align='center'---------------------------------
 corr_level <- cor(x = merge(spy_close, weekly_tys, weekly_vix, ijc), method = "spearman")
 
 corrplot(corr = corr_level, method = "color", type = "lower", title = "Correlation of variables at level", addCoef.col = "black", mar = c(1,1,2,1))
@@ -189,7 +189,7 @@ corr_stationary <- cor(x = merge(returns_spy, diff_tys, weekly_vix[-1,], ijc_gro
 
 corrplot(corr = corr_stationary, method = "color", type = "lower", title = "Correlation of stationary variables", addCoef.col = "black", mar = c(1,1,2,1))
 
-## ----ACF and PACF plot--------------------------------------------------------
+## ----ACF and PACF plot, fig.align='center'------------------------------------
 par(mfrow = c(2,1), mar = c(2,3,4,2))
 
 forecast::Acf(x = returns_spy["/2022-05",], main = "ACF of SPY Returns")
@@ -205,7 +205,7 @@ arma <- forecast::auto.arima(y = returns_spy["/2022-05",],
 
 arma
 
-## ----plot of actual and arma fitted values------------------------------------
+## ----plot of actual and arma fitted values, fig.align='center'----------------
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -227,7 +227,7 @@ spytys <- ARDL::auto_ardl(formula = SPY ~ TYS,
 
 summary(spytys$best_model)
 
-## ----plot of actual and SPYTYS fitted values----------------------------------
+## ----plot of actual and SPYTYS fitted values, fig.align='center'--------------
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -246,7 +246,7 @@ spyvix <- ARDL::auto_ardl(formula = SPY ~ VIX,
 
 summary(spyvix$best_model)
 
-## ----plot of actual and SPYVIX fitted values----------------------------------
+## ----plot of actual and SPYVIX fitted values, fig.align='center'--------------
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -265,7 +265,7 @@ spyijc <- ARDL::auto_ardl(formula = SPY ~ IJC,
 
 summary(spyijc$best_model)
 
-## ----plot of actual and SPYIJC fitted values----------------------------------
+## ----plot of actual and SPYIJC fitted values, fig.align='center'--------------
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -284,7 +284,7 @@ spyall <- ARDL::auto_ardl(formula = SPY ~ TYS + VIX + IJC,
 
 summary(spyall$best_model)
 
-## ----plot of actual and SPY_ALL fitted values---------------------------------
+## ----plot of actual and SPY_ALL fitted values, fig.align='center'-------------
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -307,7 +307,7 @@ stargazer(forecast::accuracy(f_arma, x = returns_spy["2022-06"]),
           type = "text", 
           title = "Evaluation of ARMA Model Forecast")
 
-## ----plot forecast of ARMA model----------------------------------------------
+## ----plot forecast of ARMA model, fig.align='center'--------------------------
 # Add in-sample periods Jan to May 2022, and out-of-sample period Jun 2022 (26 observations)
 # Bind actual with forecasted values 
 
@@ -365,7 +365,7 @@ stargazer(forecast::accuracy(object = f_ardl.new, x = returns_spy["2022-06"]),
           type = "text", 
           title = "Evaluation of ARDL Model Forecast")
 
-## ----plot forecast of ARDL model----------------------------------------------
+## ----plot forecast of ARDL model, fig.align='center'--------------------------
 f_ardl.level <- zoo(x = cbind(fspy = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$mean),
                               fspy_lower = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$lower),
                               fspy_upper = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$upper)),

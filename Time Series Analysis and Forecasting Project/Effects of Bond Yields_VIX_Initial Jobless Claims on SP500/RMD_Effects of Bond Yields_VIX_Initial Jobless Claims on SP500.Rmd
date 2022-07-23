@@ -1,12 +1,14 @@
 ---
 title: "Effects of Bond Yields, VIX and Initial Jobless Claims on S&P 500"
-author: "TAN Zheng Liang"
-date: "`r Sys.Date()`"
+author: "Tan Zheng Liang"
+date: "2022-07-21"
 output: 
-  html_document:
-    toc: true
-    toc_float: true
+  html_document: 
+    toc: yes
+    toc_float: yes
     code_folding: show
+    highlight: tango
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
@@ -78,7 +80,7 @@ If we want returns to be similar to the S&P 500 Index, the unadjusted closing pr
 
 Plot of SPY over the years:
 
-```{r plot price data of SPY}
+```{r plot price data of SPY, fig.align='center'}
 spy_close <- spy_price[,"SPY.Close"] %>% 
   `colnames<-`("SPY")
 
@@ -97,7 +99,7 @@ spy_close %>% urca::ur.kpss(type = "tau", lags = "long") %>% summary()
 
 ADF test is unable to reject the null hypothesis which claimed that there is unit root (-1.90 vs -3.41, left-tailed test) and KPSS test rejected the null hypothesis which claimed that it is stationary (1.02 vs 0.146). I did the tests again with the weekly returns calculated from the unadjusted closing price using the simple/discrete method.
 
-```{r calculate discrete returns and check stationarity}
+```{r calculate discrete returns and check stationarity, fig.align='center'}
 # Calculate discrete returns, na.omit to remove first observation as it will return NA
 returns_spy <- na.omit(diff(x = spy_close, lag = 1, differences = 1) / stats::lag(x = spy_close, k = 1))
 
@@ -154,7 +156,7 @@ head(weekly_tys); tail(weekly_tys); nrow(weekly_tys)
 
 Plot SPY Closing Price and 10Y/2Y Treasury Yield Spread over time: 
 
-```{r plot SPY price and yield spread}
+```{r plot SPY price and yield spread, fig.align='center'}
 plot(merge(spy_close, weekly_tys), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and 10Y/2Y Treasury Yield Spread")
 ```
 
@@ -170,7 +172,7 @@ ADF test shows that we cannot reject the null hypothesis (-1.43 vs -2.86), so un
 
 Since the yield spread is stated in percentage, I would simply take the first difference which would refer to the week-to-week changes in yield spread.
 
-```{r calculate first diff of yield spread and test for stationarity}
+```{r calculate first diff of yield spread and test for stationarity, fig.align='center'}
 # Remove first observation since it will return NA after taking first difference
 diff_tys <- na.omit(diff(x = weekly_tys, lag = 1, differences = 1))
 
@@ -212,7 +214,7 @@ head(weekly_vix); tail(weekly_vix); nrow(weekly_vix)
 
 Plot SPY Closing Price and VIX over time: 
 
-```{r plot SPY price and VIX}
+```{r plot SPY price and VIX, fig.align='center'}
 plot(merge(spy_close, weekly_vix), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and VIX")
 ```
 
@@ -256,13 +258,13 @@ head(ijc); tail(ijc)
 
 Plot SPY Closing Price and Initial Jobless Claims over time: 
 
-```{r plot SPY price and IJC}
+```{r plot SPY price and IJC, fig.align='center'}
 plot(merge(spy_close, ijc), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and Initial Jobless Claims")
 ```
 
 Due to the COVID-19 pandemic beginning in early 2020, there was an influx of initial unemployment claims that caused the historical patterns of claims to look flat. Such an increase in numbers may affect the estimated models.
 
-```{r SPY and VIX before 2020}
+```{r SPY and VIX before 2020, fig.align='center'}
 plot(merge(spy_close, ijc)["/2019",], multi.panel = T, yaxis.same = F, main = "SPY and Initial Jobless Claims Before 2020")
 ```
 
@@ -303,7 +305,7 @@ To summarize what had been done in this section, I discussed how the yield sprea
 
 The correlation heatmaps shows how the data at levels and the stationary data correlate with other variables in their respective groups.
 
-```{r correlation heatmaps}
+```{r correlation heatmaps, fig.align='center'}
 corr_level <- cor(x = merge(spy_close, weekly_tys, weekly_vix, ijc), method = "spearman")
 
 corrplot(corr = corr_level, method = "color", type = "lower", title = "Correlation of variables at level", addCoef.col = "black", mar = c(1,1,2,1))
@@ -326,7 +328,7 @@ For all model types, I used stationary data up to end-May 2022 as a training set
 
 The ARMA model is the simplest model to estimate, since it only uses the lags of the dependent variable and the lags of the error term. A plot of the autocorrelation function (ACF) and partial autocorrelation function (PACF) of the dependent variable can provide some information about the number of lags to choose from.
 
-```{r ACF and PACF plot}
+```{r ACF and PACF plot, fig.align='center'}
 par(mfrow = c(2,1), mar = c(2,3,4,2))
 
 forecast::Acf(x = returns_spy["/2022-05",], main = "ACF of SPY Returns")
@@ -354,7 +356,7 @@ $$
 
 Plot of actual and fitted values:
 
-```{r plot of actual and arma fitted values}
+```{r plot of actual and arma fitted values, fig.align='center'}
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -394,7 +396,7 @@ Based on the estimated coefficients, the Treasury Yield Spread at time $t$ has p
 
 Plot of actual and fitted values:
 
-```{r plot of actual and SPYTYS fitted values}
+```{r plot of actual and SPYTYS fitted values, fig.align='center'}
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -429,7 +431,7 @@ Unlike what we had thought about the negative correlation between SPY returns an
 
 Plot of actual and fitted values:
 
-```{r plot of actual and SPYVIX fitted values}
+```{r plot of actual and SPYVIX fitted values, fig.align='center'}
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -462,7 +464,7 @@ The low Adjusted R-Squared value means that the weekly percentage change in Init
 
 Plot of actual and fitted values:
 
-```{r plot of actual and SPYIJC fitted values}
+```{r plot of actual and SPYIJC fitted values, fig.align='center'}
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -491,7 +493,7 @@ Based on ARDL automatic selection, the model with the lowest AIC is rather compl
 
 Plot of actual and fitted values:
 
-```{r plot of actual and SPY_ALL fitted values}
+```{r plot of actual and SPY_ALL fitted values, fig.align='center'}
 plot.zoo(returns_spy["/2022-05",], 
          col = "black", type = "l", lwd = 2, 
          ylab = "SPY Returns", xlab = "Time", 
@@ -526,7 +528,7 @@ For the evaluation metrics, Root Mean Squared Error (RMSE) and Mean Absolute Err
 
 Plot forecasted and actual SPY at level (price data):
 
-```{r plot forecast of ARMA model}
+```{r plot forecast of ARMA model, fig.align='center'}
 # Add in-sample periods Jan to May 2022, and out-of-sample period Jun 2022 (26 observations)
 # Bind actual with forecasted values 
 
@@ -596,7 +598,7 @@ stargazer(forecast::accuracy(object = f_ardl.new, x = returns_spy["2022-06"]),
 
 Plot forecasted and actual SPY at level (price data):
 
-```{r plot forecast of ARDL model}
+```{r plot forecast of ARDL model, fig.align='center'}
 f_ardl.level <- zoo(x = cbind(fspy = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$mean),
                               fspy_lower = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$lower),
                               fspy_upper = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$upper)),
