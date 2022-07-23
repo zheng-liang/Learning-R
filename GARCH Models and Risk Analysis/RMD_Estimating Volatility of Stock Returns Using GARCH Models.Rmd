@@ -1,12 +1,14 @@
 ---
 title: "Estimating Volatility of Stock Returns Using GARCH Models"
-author: "zhengliang"
-date: "`r Sys.Date()`"
+author: "Tan Zheng Liang"
+date: "2022-07-16"
 output: 
-  html_document:
-    toc: true
-    toc_float: true
+  html_document: 
+    toc: yes
+    toc_float: yes
     code_folding: show
+    highlight: tango
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
