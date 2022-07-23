@@ -308,7 +308,7 @@ corrplot(correldiff,
          title = "Correlation Matrix of First Differenced Variables",
          mar = c(0, 0, 1, 0))
 
-## ----acf pacf, fig.align='center'---------------------------------------------
+## ----acf pacf, fig.align='center', echo=FALSE---------------------------------
 par(mfrow = c(2,1), mar = c(3, 3, 4, 2))
 
 forecast::Acf(x = diff.train$dCPI, main = "ACF of dCPI")

@@ -1,10 +1,14 @@
 ---
 title: "Forecasting Singapore's Consumer Price Index Using Different Time Series Models"
 output:
-  html_document:
-    toc: true
-    toc_float: true
-    code_folding: hide
+  html_document: 
+    toc: yes
+    toc_float: yes
+    code_folding: show
+    highlight: tango
+    theme: flatly
+    fig_width: 6
+    fig_height: 4
 ---
 
 ```{r setup, include=FALSE}
@@ -510,7 +514,7 @@ $$
 
 This can be written simply as ARIMA(p, d, q). In Section 6, I had tested that the CPI series is an I(1) series, which means it is stationary at first difference. Therefore, we have an ARIMA(p, 1, q) model. The p and q lags are determined in various ways. Firstly, it is common to use the autocorrelation and partial autocorrelation function to determine the lag order. The functions **`Acf`** and **`Pacf`** in the **`forecast`** package can plot the ACF and PACF.
 
-```{r acf pacf, fig.align='center'}
+```{r acf pacf, fig.align='center', echo=FALSE}
 par(mfrow = c(2,1), mar = c(3, 3, 4, 2))
 
 forecast::Acf(x = diff.train$dCPI, main = "ACF of dCPI")
