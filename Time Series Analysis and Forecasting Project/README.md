@@ -22,3 +22,12 @@ and the U.S. Initial Jobless Claims on the S&P 500, measured by the SPDR S&P 500
 Distributed Lags model was used to estimate the SPY returns and forecast for the 4 weeks in June 2022. 
 
 Click the link to access the rendered HTML file: https://tinyurl.com/yc848duj
+
+### 3 Effects of Seasonality in Forecasting Singapore's Consumer Price Index
+
+In the project Forecasting Singapore CPI Using Different Time Series Models, I had ignored the effects of seasonality
+on the Singapore Consumer Price Index when estimating the models. In this project, I attempted to find out if seasonality
+does affect Singapore CPI using ARIMA, SARIMA, ARIMAX and SARIMAX models. I used either seasonal differencing in the case of
+SARIMA and SARIMAX or added seasonal dummies as external regressors.  
+
+Click the link to access the rendered HTML file: https://tinyurl.com/ycamcvt5
