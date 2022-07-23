@@ -1,12 +1,16 @@
 ---
 title: "Effect of Risk Measures on Portfolio Composition and Performance"
-author: "zhengliang"
-date: "`r Sys.Date()`"
+author: "Tan Zheng Liang"
+date: "2022-07-09"
 output: 
-  html_document:
-    toc: true
-    toc_float: true
+  html_document: 
+    toc: yes
+    toc_float: yes
     code_folding: show
+    highlight: tango
+    theme: flatly
+    fig_width: 6
+    fig_height: 4
 ---
 
 ```{r setup, include=FALSE}
@@ -269,9 +273,7 @@ Let us take a look at the `price_data` object we have created to make sure that 
 ```{r head tail of price data}
 head(price_data, n = 4); tail(price_data, n = 4)
 
-nrow(price_data)
-
-colSums(is.na(price_data))
+nrow(price_data); colSums(is.na(price_data))
 ```
 
 We have a total of 149 monthly observations per security and there are no NA values in the columns. Now that we have ensured the price data is in time order and there are no missing values, we can calculate the monthly returns of each security.
@@ -279,9 +281,7 @@ We have a total of 149 monthly observations per security and there are no NA val
 ```{r individual security return}
 returns <- na.omit(PerformanceAnalytics::Return.calculate(price_data, method = "discrete"))
 
-head(returns)
-
-nrow(returns)
+head(returns); nrow(returns)
 ```
 
 With the `returns` data, we can proceed with optimizing the portfolios based on different risk measures. I created portfolios that minimizes the different risk measures in Section 5 and optimal portfolios that minimizes risk for a given level of return in Section 6.

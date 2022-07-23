@@ -126,16 +126,12 @@ colnames(price_data) <- tickers
 ## ----head tail of price data--------------------------------------------------
 head(price_data, n = 4); tail(price_data, n = 4)
 
-nrow(price_data)
-
-colSums(is.na(price_data))
+nrow(price_data); colSums(is.na(price_data))
 
 ## ----individual security return-----------------------------------------------
 returns <- na.omit(PerformanceAnalytics::Return.calculate(price_data, method = "discrete"))
 
-head(returns)
-
-nrow(returns)
+head(returns); nrow(returns)
 
 ## ----initial portfolio spec---------------------------------------------------
 init_spec <- PortfolioAnalytics::portfolio.spec(assets = colnames(returns))
