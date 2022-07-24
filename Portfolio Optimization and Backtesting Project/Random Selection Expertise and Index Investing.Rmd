@@ -1,0 +1,132 @@
+---
+title: "Random Selection, Expertise and Index Investing"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_download: true
+    code_folding: show 
+    highlight: tango
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The aim of this project is to find out if portfolios made of 10 randomly selected stocks from the S&P500 Large-Cap Index can outperform stock-picking experts and index investing. The portfolios were optimized based on the mean-variance framework developed by Harry Markowitz for simplicity, with the goal of maximizing the ex-post Sharpe Ratio during the optimization period.
+
+(To be completed last)
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(ROI) # For ROI solver in portfolio optimization
+library(ROI.plugin.glpk) # Part of the ROI solver for linear optimization
+library(ROI.plugin.quadprog) #Part of the ROI solver for quadratic optimization
+library(tidyquant) # For quantmod and PerformanceAnalytics functions
+library(tidyverse) # For dplyr and ggplot2 functions (data manipulation and plotting)
+```
+
+## 3 Retrieve Index Components and Price Data {.tabset .tabset-pills}
+
+### 3.1 Index Components
+
+The components of S&P500 can be obtained using **`tidyquant::tq_index()`**. 
+
+```{r get index components using tidyquant, message=FALSE}
+# Only require ticker and maybe name of company, which is columns 1 and 2 of query result
+
+sp500 <- tidyquant::tq_index(x = "SP500")[,1:2]
+
+sp500
+
+tickers <- sp500$symbol
+```
+
+### 3.2 Price Data
+
+Using **`quantmod::getSymbols()`**, I retrieved the daily adjusted closing prices of the tickers from Yahoo Finance, starting from 1 January 2015 to 1 July 2022. In the for loop, I imposed a condition that there should not be any NA values in the prices during this period, which would not be added into the `prices` data.
+
+```{r retrieve price data, warning=FALSE}
+startdate <- as.Date("2015-01-01")
+enddate <- as.Date("2022-07-01")
+
+prices <- NULL
+
+notmet <- NULL
+
+for (t in tickers) {
+   
+   tmp <- NULL
+  
+   tmp <- try(
+       expr = {quantmod::getSymbols(Symbols = t, src = "yahoo", auto.assign = F, 
+                                    from = startdate, to = enddate, periodicity = "daily")[,6]},
+       silent = TRUE
+   )
+   
+   if(inherits(tmp, "try-error")) {cat("ERROR:", t, sep = " "); next}
+   
+   names(tmp) <- t
+   
+   prices <- cbind(prices, tmp)
+}
+
+dim(prices); start(prices); end(prices)
+```
+
+The download has failed for `BRK.B (Berkshire Hathaway)` and `BF.B (Brown-Forman Corporation)` because the tickers in Yahoo Finance are `BRK-B` and `BF-B` respectively. I used the correct tickers to retrieve their data and added them to `prices`.
+
+```{r add BRK-B and BF-B}
+prices <- cbind(quantmod::getSymbols(Symbols = "BRK-B", src = "yahoo", auto.assign = F, 
+                                     from = startdate, to = enddate, periodicity = "daily")[,6],
+                quantmod::getSymbols(Symbols = "BF-B", src = "yahoo", auto.assign = F, 
+                                     from = startdate, to = enddate, periodicity = "daily")[,6],
+                prices)
+
+colnames(prices)[1:2] <- c("BRK-B", "BF-B")
+
+dim(prices)
+```
+
+### 3.3 Sample Tickers for Portfolios
+
+I created 10 portfolios of 10 tickers each, sampled from `prices` without replacement. The **`set.seed()`** allows the random sample to be reproducible.
+
+```{r create 10 portfolios with 10 tickers each}
+portprice_list <- list()
+
+for (i in 1:10) {
+  set.seed((50+i)^2)
+  
+  portprice_list[[i]] <- prices[, sample(x = ncol(prices), size = 10, replace = FALSE)]
+  
+  names(portprice_list)[i] <- paste("P", i, "_prices", sep = "")
+}
+
+lapply(portprice_list, head, 4)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
