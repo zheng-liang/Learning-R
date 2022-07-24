@@ -30,4 +30,4 @@ on the Singapore Consumer Price Index when estimating the models. In this projec
 does affect Singapore CPI using ARIMA, SARIMA, ARIMAX and SARIMAX models. I used either seasonal differencing in the case of
 SARIMA and SARIMAX or added seasonal dummies as external regressors.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/2m8yd2h8
+Click the link to access the rendered HTML file: https://tinyurl.com/ycamcvt5
