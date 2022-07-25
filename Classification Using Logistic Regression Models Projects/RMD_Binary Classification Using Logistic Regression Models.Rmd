@@ -1,0 +1,618 @@
+---
+title: "Binary Classification Using Logistic Regression Models"
+author: "zhengliang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The purpose of this project was to apply what I had learnt about logistic regression and classification in machine learning (ML). It documents (1) the packages and functions that are useful for logistic classification and ML, and (2) the steps to building a logistic classification model in R.
+
+The project has three main parts. In the first part, I introduced what logistic regression is and why it is used in classification in machine learning. In the second part, I provided examples of logistic regression in binary classification (i.e. there are only two outcomes) using an in-built dataset in R. In the last part, I applied the logistic regression along with more practical approaches to variable selection on a separate dataset.
+
+This project focused on how to use logistic regression models in binary classification, and less about the mathematical application and theory behind it as these can be found on various websites and textbooks.
+
+### 1.1 What is logistic regression and why is it used in classification problems?
+
+Logistic regression is commonly used to determine the relationship between binary outcomes and one or more independent variables. The logistic regression model is written as
+
+$$
+\log\bigg(\frac{p(y=1)}{1-p(y=1)}\bigg) = \beta_0 + \beta_1x_1 + \beta_2x_2 + ... + \beta_nx_n
+$$
+and shows a linear relationship between the independent variables and the log-odds (or logit), where the odds refers to $\frac{p}{1-p}$. The independent variables can be categorical or continuous variables. The dependent variable has only two outcomes (in general), for example yes or no, male or female, default or no default.
+
+The coefficients of the independent variables can be interpreted as the effect of an increase in $x_n$ on the log-odds. The probability where $y=1$can also be obtained through some mathematical operations, though this can be done automatically in R. By setting a cut-off probability or threshold value, we can classify whether an observation is likely to fall under $y=1$ or $y=0$. 
+
+Logistic regression can be simple to understand and interpret, although it may not be the best classification model in comparison to more sophisticated ML algorithms.
+
+### 1.2 What are the assumptions needed for logistic regression?
+
+This sub-section lists the common assumptions of logistic regressions and some of the ways to check them.
+
+#### 1.2(a) Type of logistic regression matches the response variable
+
+The type of logit regression needs to match the type of outcome. In most cases, logit regression is used for binary outcomes but there are cases where it might be used for multinomial or ordinal outcomes and appropriate models need to be used for each type.
+
+**To check assumption**: Check the number of unique outcomes/response variable. If there are only two outcomes, it is very likely to be a binary classification problem. If there are more than two outcomes, we are dealing with multinomial or ordinal classification problems.
+
+#### 1.2(b) Observations are independent
+
+Observations need to be independent of one another, and not be affected by other observations.
+
+**To check assumption**: Plot the residuals against order of observations and check if there is a random pattern. If pattern is not random, it indicates possibility of correlation between observations. However, autocorrelation should be less of a concern with cross-sectional data as long as the design of the study ensures that data are collected from random samples and there are no repeated or paired observations.
+
+#### 1.2(c) No multicollinearity among explanatory variables
+
+Independent variables should not be highly correlated with one another as it affects the variance of estimated coefficients and statistical significance of estimated coefficients becomes unreliable.
+
+**To check assumption**: A simple method would be to use a correlation matrix to find highly correlated explanatory variables. Another method is to calculate the variance inflation factor (VIF) of each explanatory variable. A common rule of thumb is that VIF more than 10 indicates problem of multicollinearity.
+
+#### 1.2(d) Linear relationship between continuous explanatory variables and logit of response variable
+
+Continuous explanatory variables and the logit of the response variable (or log-odds) have a linear relationship. Logit regression does not require linearity between continuous explanatory variables and response variable.
+
+**To check assumption**: Plot log-odds against each continuous explanatory variable and check for linear relationship
+
+#### 1.2(e) No highly influential outliers
+
+There should be no influential outliers that could affect the outcome of the model. Removing such observations are possible if they are determined to be incorrectly entered or measured. It is also possible to compare the regression results with and without the outliers, and note how the results differ.
+
+**To check assumption**: Calculate Cook's Distance to find influential observations and standardized residuals to find outliers.
+
+#### 1.2(f) Large sample size
+
+A large sample size is needed to produce conclusive results.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, class.source = "fold-show"}
+# Use install.packages("packagename") if the packages are not installed in R
+library(car) 
+library(caret) # For building ML models
+library(corrplot) # For correlation plot
+library(smotefamily) # For SMOTE when there are imbalanced datasets
+library(lmtest) # For statistical tests
+library(mlbench) # For data sets
+library(ROCR) # For determining cutoff-probability using ROC
+library(ROSE) # For re-sampling techniques when there are imbalanced datasets
+library(stargazer) # For neat tables and outputs, where possibles
+library(tidyverse) # For ggplot and dplyr packages
+```
+
+These packages provide the necessary functions and data sets that can be used for learning and building logistic classification models.
+
+## 3 Basics of Logistic Regression
+
+This section covers how to perform logistic regression and solve binary classification problems using an in-built dataset.
+
+I selected the Pima Indians Diabetes Database in the **`mlbench`** package for this example. The purpose is to determine the probability of a person having diabetes based on several variables such as the person's body mass index, age, and blood pressure.
+
+### 3.1 Exploratory Data Analysis
+
+Let us first load the data and perform an Exploratory Data Analysis before the modelling task.
+
+```{r load PimaIndiansDiabetes dataset}
+data("PimaIndiansDiabetes")
+```
+
+```{r structure and summary}
+str(PimaIndiansDiabetes)
+
+summary(PimaIndiansDiabetes)
+```
+
+```{r head and tail of df}
+stargazer::stargazer(rbind(head(PimaIndiansDiabetes), tail(PimaIndiansDiabetes)), 
+                     type = "text", 
+                     title = "First and Last 6 Observations in PimaIndiansDiabetes Dataset",
+                     summary = F)
+```
+
+By entering `??PimaIndiansDiabetes` into the console, we can get a description of the variables in the data frame. I have listed the variables and its description in the table below.
+
+| Variable | Description                                           |
+|----------|-------------------------------------------------------|
+| pregnant | Number of times pregnant                              |
+| glucose  | Plasma glucose concentration (glucose tolerance test) |
+| pressure | Diastolic blood pressure (mm Hg)                      |
+| triceps  | Triceps skin fold thickness (mm)                      |
+| insulin  | 2-Hour serum insulin (mu U/ml)                        |
+| mass     | Body mass index (weight in kg/(height in m)^2)        |
+| pedigree | Diabetes pedigree function                            |
+| age      | Age (years)                                           |
+| diabetes | Class variable (test for diabetes)                    |
+
+The **`str`** function shows that there are 768 observations with 9 variables and only the variable *`diabetes`* is a factor while all other variables are numeric.
+
+The **`summary`** function reveals that there are possibly some errors in the data, with value of zero in variables *`glucose`*, *`pressure`*, *`triceps`*, and *`mass`*. I would remove these observations to keep things simple. The imputation of these variables would require methods beyond using the mean or median of each variable.
+
+```{r filter out obs}
+data <- PimaIndiansDiabetes %>%
+  dplyr::filter(glucose != 0 & pressure != 0 & triceps != 0 & mass != 0)
+
+summary(data)
+```
+
+It seems that *`insulin`* has values of zero as well, which could be due to not receiving insulin despite having diabetes. Removing these observations might impact the results and analysis.
+
+Now that there is a better understanding of the variables in the dataset, I would plot these variables to visualize their distribution.
+
+```{r split response and explvar}
+response <- subset(data, select = c(diabetes))
+
+explvar <- subset(data, select = -c(diabetes))
+
+summary(response)
+summary(explvar)
+```
+
+Let us take a look at the distribution of the response and explvar variables in a univariate plot. This gives us a visual understanding of how the variables are distributed individually.
+
+```{r dist of diabetic test, fig.width=6, fig.height=4.5, fig.align='center'}
+ggplot(data = response) + 
+  geom_bar(aes(x = diabetes, fill = diabetes)) + 
+  ggtitle("Distribution of Outcomes from Diabetes Test") +
+  xlab("Diabetes") + ylab("Frequency") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+We have about twice as many negative observations compared to positive observations. While this may not be a problem in our case, it would be good to think about the representation of observations in a more complex dataset. Under-representation of any group in an analysis may lead to unreliable results and prediction.
+
+```{r boxplot of dependent variables, fig.width=6, fig.height=4.5, fig.align='center'}
+par(mfrow = c(1, 4), mar = c(1, 3, 2, 1))
+
+for (i in 1:4) {
+  boxplot(explvar[,i], main = names(explvar)[i])
+}
+
+for (i in 5:8) {
+  boxplot(explvar[,i], main = names(explvar)[i])
+}
+```
+
+Plotting the explanatory variables using histograms allow us to visually check how the data is distributed. The plots show that most variables do not have a normal distribution, which we can further check with the Shapiro-Wilk's test.
+
+```{r histogram of dependent variables, fig.width=6, fig.height=4.5, fig.align='center'}
+par(mfrow = c(1, 4), mar = c(2, 3, 2, 1))
+
+for (i in 1:4) {
+  hist(explvar[,i], main = names(explvar)[i])
+}
+
+for (i in 5:8) {
+  hist(explvar[,i], main = names(explvar)[i])
+}
+```
+
+```{r shapirotest}
+store_test <- list()
+
+for (i in 1:8) {
+  store_test <- cbind(store_test, 
+                      shapiro.test(x = explvar[,i]))
+}
+
+store_test["data.name",] <- names(explvar)
+
+store_test
+
+store_test["p.value",] > 0.05
+```
+
+We can use multivariate plots to visualize how variables interact with one another. Using a correlation matrix heatmap, we can visualize the correlation between variables and check for the presence of multicollinearity between explanatory variables. Since the Shapiro-Wilk's test rejected the hypothesis of normal distribution for the explanatory variables, I would use the Spearman correlation instead of Pearson correlation.
+
+```{r correlation matrix heatmap, fig.align='center'}
+corrX <- cor(x = explvar, method = "spearman")
+
+corrplot(corr = corrX, 
+         method = "color", 
+         addCoef.col = "black",
+         title = "Correlation Between Explanatory Variables",
+         mar = c(0, 0, 1, 0))
+```
+
+From the correlation matrix, there does not seem to be any highly correlated explanatory variables, which may satisfy our assumption that there is no multicollinearity.
+
+Now that we have a better understanding of the variables in the dataset, we can proceed with the modelling process.
+
+### 3.2 Building the Binary Logistic Regression Model
+
+To start off, we can create a logistic regression model that uses all the explanatory variables. We need to use the **`glm`** function and for the **`family`** argument, we indicate `binomial(link = "logit")` for logistic regression.
+
+```{r create logit model1}
+# Full model
+model1 <- glm(diabetes == "pos" ~ ., #indicate "pos" so that it is 1 and "neg" is 0
+              data = data, 
+              family = binomial(link = "logit"))
+
+stargazer::stargazer(model1, 
+                     type = "text", 
+                     title = "Logit Regression Output for Full Model")
+```
+
+The coefficients (or "Estimate" in the regression output) of the explanatory variables refers to the effect on the log-odds and not the probability itself.
+
+Variables *`pressure`*, *`triceps`*, *`insulin`*, and *`age`* has p-values more than the significance level of 5%. We may consider removing them from the equation and see if we get better results. The Likelihood Ratio test will be needed to test if the difference is significant, which is something like an F-test for Ordinary Least Squares regression models. The null hypothesis is that the full model and the restricted model fits the data equally well and we should use the restricted model. The alternative is to use the full model.
+
+```{r create logit model2}
+# Restricted model
+model2 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree, 
+              data = data,
+              family = binomial(link = "logit"))
+
+stargazer::stargazer(model2, 
+                     type = "text", 
+                     title = "Logit Regression Output for Restricted Model")
+```
+
+```{r lrtest1}
+lmtest::lrtest(model2, model1)
+```
+
+Since the **`lrtest`** function returned a p-value more than 5%, we do not reject the null and hence, we will use the restricted model for our analysis.
+
+#### 3.2(a) Testing Multicollinearity Assumption
+
+In Section 3.1 Exploratory Data Analysis, I used the correlation matrix to determine if there are any highly correlated explanatory variables. Another method is to use the Variance Inflation Factor.
+
+```{r vif1}
+car::vif(model2)
+```
+
+None of the variables has a VIF of more than 10. Therefore, it is likely that there is no multicollinearity among the explanatory variables.
+
+#### 3.2(b) Testing Linearity Assumption
+
+To check if there is a linear relationship between the continuous explanatory variables and the logit of the response variable, we need to obtain the fitted probabilities from our model. The **`fitted.values`** function returns the probability and not the log-odds.
+
+```{r fitted values from model2}
+prob.model2 <- fitted.values(model2)
+
+head(prob.model2)
+```
+
+```{r calculate logit and bind into data}
+pred <- names(coef(model2)[-1]) # Exclude intercept
+
+plotdata <- subset(data, select = pred) # Only keep the variables used in the model
+
+plotdata <- plotdata %>%
+  mutate(logit = log(prob.model2/(1-prob.model2))) %>% # Bind logit to plotdata
+  gather(key = "pred", value = "pred.value", -logit) 
+```
+
+```{r plot variables against logit, message=FALSE, fig.align='center'}
+ggplot(data = plotdata, aes(x = logit, y = pred.value)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "loess") +
+  facet_wrap(. ~ pred, scales = "free")
+```
+
+We can see that variables *`glucose`*, *`mass`* and *`pregnant`* are have a rather linear relationship, but *`pedigree`* has a non-linear relationship with the log-odds. I have attempted to transform the variable using the natural log.
+
+```{r create logit model3}
+model3 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + log(pedigree),
+              data = data,
+              family = binomial(link = "logit"))
+
+stargazer::stargazer(model3, 
+                     type = "text", 
+                     title = "Logit Regression Output for Model With Transformed Variable")
+```
+
+```{r store fitted values from model3 and calculate logit}
+prob.model3 <- fitted.values(model3)
+
+logit = log(prob.model3/(1-prob.model3))
+```
+
+```{r transfrom pedigree with log}
+plotdata2 <- subset(data, select = pred)
+
+plotdata2 <- plotdata2 %>%
+  mutate(l.pedigree = log(pedigree))
+```
+
+```{r plot logped against logit, fig.width=6, fig.height=4.5, fig.align='center'}
+ggplot(data = plotdata2, aes(x = logit, y = l.pedigree)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "loess")
+```
+
+After the log transformation, *`pedigree`* has a more linear relationship with the log-odds compared to before.
+
+#### 3.2(c) Checking for Highly Influential Outliers
+
+This requires that we find outliers that are highly influential. To determine the observations that have the highest influence, we can plot the Cook's Distance generated from the model or calculate them using **`cooks.distance`** function. To determine the outliers, we use the standardized residuals and check if there are any observations with absolute values greater than 3. We can also use the **`outlierTest`** function in the **`car`** package to calculate the studentized residuals.
+
+```{r cooks distance}
+plot(model3, which = 4)
+
+head(sort(cooks.distance(model3), decreasing = T))
+```
+
+```{r std resid}
+std.resid <- rstandard(model3)
+
+val <- abs(std.resid) > 3
+
+table(val)["TRUE"] # Returned NA because there are no TRUE logical values
+```
+
+```{r studentized resid1}
+car::outlierTest(model3)
+```
+
+I had found no outliers that were highly influential based on the tests that were conducted. If outliers were found, instead of removing them, it is better to investigate these observations to check if they were erroneously measured or recorded.
+
+## 4 Evaluating the Models
+
+Now that we have created a few models, we can evaluate how each model performs in predicting the in-sample observations. We first store the fitted values of different models and I will set the cutoff at 0.5 to determine whether an observation would be positive or negative to make things simple for now.
+
+### Model 1: Full Model
+
+```{r prob model1}
+prob.model1 <- fitted.values(model1) #can also use predict(model1, type="response")
+```
+
+```{r prediction and conMat model1}
+prediction.model1 <- as.factor(ifelse(prob.model1 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model1,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+`model1` was able to predict 316 negatives that are actually negatives (True Negatives) and predict 101 positives that are actually positive (True Positives). It predicted 76 negatives when they are actually positive observations (False Negatives) and predicted 39 positive observations when they are actually negative (False Positives). Since this is a model to predict whether a person is diabetic, the 76 false negatives could be a more serious problem as it would result in life-threatening situations. The 39 false positive could be lowered, but there is always a trade-off in using prediction models and we should also consider the costs involved in real-life situations.
+
+### Model 2: Restricted Model (Not Transformed)
+
+```{r prediction and conMat model2}
+prediction.model2 <- as.factor(ifelse(prob.model2 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model2,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### Model 3: Restricted Model with Transformation
+
+```{r prediction and conMat model3}
+prediction.model3 <- as.factor(ifelse(prob.model3 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model3,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+We can see that Models 2 and 3 have the same evaluation but these models did better than Model 1 based on the accuracy of 0.7989 for Models 2 and 3 compared to 0.7989 for Model 1 (how well it was able to correctly identify actual positive and negative). However, accuracy should not be the sole measure of better models as it could increase despite having more false negatives or false positives. Here are some measures that should be considered for classification models:
+
+| Metric             | Description                                           |
+|--------------------|-------------------------------------------------------|
+| Precision          | How well model was able to correctly predict positive cases, $TP/(TP+FP)$ (useful when concerned with false positive over false negatives) |
+| Recall/Sensitivity | How well model was able to predict actual positive cases, $TP/(TP+FN)$ (useful when concerned with false negative over false positive) |
+| F1 Score           | Combines Precision and Recall, $2 \times (Precision \times Recall)/(Precision + Recall)$ (useful when FP and FN are equally costly) |
+| Specificity        | How well model was able to predict actual negative cases, $TN/(TN+FP)$ (also called true negative rate) |
+
+
+## 5 Determining the Cut-off Probability
+
+Rather than using an arbitrary cut-off probability, we can use the Receiver Operating Characteristic (ROC) curve to determine a better cut-off probability which can increase the true positives while lowering the false negatives. I used Model 2 to illustrate the use of the ROC curve in determining the threshold value.
+
+The ROC curve plots the True Positive Rate (or Recall/Sensitivity) against the False Positive Rate at different probability thresholds. To plot the ROC curve, we need the functions **`prediction`** and **`performance`** in the **`ROCR`** package. The former function will produce prediction results at different thresholds while the latter function plots them based on different metrics specified.
+
+```{r ROC and plot}
+# First argument is the probabilities extracted using fitted() or predict()
+# Second argument is the classification labels with same dimensions as first argument
+# Third argument is the order, with first label being negative, second being positive class
+ROCRpred <- ROCR::prediction(predictions = prob.model2, labels = data$diabetes, label.ordering = c("neg" , "pos"))
+
+# Performance based on true positive rate and false positive rate (ROC curve)
+ROCperf <- ROCR::performance(prediction.obj = ROCRpred, measure = "tpr", x.measure = "fpr")
+
+# Plot ROC Curve and indicate threshold value
+plot(ROCperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.05), 
+     text.adj = c(-0.2, 1),
+     main = "ROC Curve for Pima Indians Diabetes Dataset")
+```
+
+From the ROC curve, we can see the trade-off between TPR and FPR at different probability thresholds. If we do not mind having more false positives, we can increase the number of true positives detected by the model by using a threshold lower than 0.5, for example at 0.35 to keep the FPR around 0.2 but increasing the TPR to about 0.75-0.8. However, as discussed previously, false negatives are much more of a concern to us since the purpose of the model is to predict if a person is diabetic or not. In such cases, we should use another plot called the Precision-Recall Curve (particularly in cases where there are class imbalances.)
+
+```{r prec_rec plot}
+# Performance based on precision and recall
+Precperf <- ROCR::performance(prediction.obj = ROCRpred, measure = "prec", x.measure = "rec")
+
+# Plot Precision-Recall Curve with threshold values
+plot(Precperf, 
+     colorize = T, 
+     print.cutoffs.at = seq(0, by = 0.05), 
+     text.adj = c(-0.2, 1),
+     main = "Precision-Recall Curve for Pima Indians Diabetes Dataset")
+```
+
+Based on the trade-off between the Precision and Recall scores, we could have the threshold at 0.35 since it greatly increases Recall (better when FN are more costly that FP) while leading to a slight reduction in Precision. Let us use the confusion matrix to evaluate if this probability threshold is better than using 0.5.
+
+```{r conMat 0.3}
+new_pred.model2 <- as.factor(ifelse(prob.model2 > 0.35, "pos", "neg"))
+
+confusionMatrix(data = new_pred.model2,
+                reference = data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+
+```
+
+By changing the threshold, I was able to decrease the number of False Negatives and increase the number of True Positives. However, this came at the cost of reduced True Negatives and increased False Positives. There are definitely more sophisticated methods to determine the appropriate threshold values, but these are the simpler methods that can be applied.
+
+## 6 Dealing With Imbalanced Datasets
+
+In Section 3.1 Exploratory Data Analysis, the plot of the distribution of the class *`diabetes`* revealed that there are about twice as many negative observations than positive observations. While this might not be considered a serious imbalanced dataset, we do have lesser observations of one class compared to the other. It is not uncommon for datasets to have more observations of one class compared to another due to their natural rate of occurrence and sampling techniques. Imbalanced datasets pose the risk of biased prediction as it can identify the majority class more easily than the minority class.
+
+The three common techniques to deals with this issue are under-sampling, over-sampling and synthetic minority over-sampling technique (SMOTE). Under-sampling randomly removes observations of the majority class while over-sampling randomly replicates observations of the minority class to balance the dataset. Under-sampling reduces information about the majority class while over-sampling simply replicates observations which could lead to overfitting. SMOTE is another over-sampling method but instead of replicating the observations, it creates artificial data with respect to the minority class by using the nearest neighbor technique between the minority class.
+
+The **`ROSE`** package can be used for under-sampling and over-sampling the dataset, while the **`smotefamily`** package can be used for SMOTE. In our original data, we had 355 negative observations and 177 positive observations, and we can compare how it has changed after the re-sampling is done.
+
+### Under-Sampling Method
+
+```{r undersample data}
+# Argument 1 indicates the class vs all other variables in the dataset
+# Argument 2 indicates where to find the data
+# Argument 3 indicates whether to over- or under-sample
+# Argument 4 indicates target number of observations, in this case I put 2 times of the minority class
+
+undersample <- ROSE::ovun.sample(diabetes ~ ., 
+                                 data = data, 
+                                 method = "under", 
+                                 N = 177*2)
+
+summary(undersample)
+```
+
+### Over-Sampling Method
+
+```{r oversample data}
+# For over-sampling, I indicate 2 times of majority class for target number of observations
+
+oversample <- ROSE::ovun.sample(diabetes ~ .,
+                                data = data,
+                                method = "over",
+                                N = 355*2)
+
+summary(oversample)
+```
+
+### SMOTE Method
+
+```{r smote data}
+# X refers to data frame or matrix containing numeric-attributed explanatory variables
+# target refers to vector of the class corresponding to X
+# K = 5 is the default number of nearest neighbors, SMOTE uses KNN to generate artificial data
+# dup_size refers to the multiples of minority observations compared to majority observations
+# In this case, 1 means to generate 1 minority for 1 majority observation
+
+smote <- smotefamily::SMOTE(X = explvar,
+                            target = response, 
+                            K = 5, 
+                            dup_size = 1)
+
+# Extract the newly generated data set that contains both the synthetic and original observations
+smote_data <- smote$data
+
+summary(smote_data)
+
+# diabetes variable has been replaced by class and is in character class, need to change it to factor
+smote_data$class <- factor(smote_data$class)
+
+summary(smote_data)
+```
+
+For the under-sampling method, the number of majority class observations has been reduced to 177, while for the over-sampling method, the number of the minority class observations was increased to 355. For SMOTE, we can see that the number of positive observations have been increased and nearly matches the number of the negative observations. For all three techniques, we do not see a difference in the minimum and maximum values of the explanatory variables, but there are differences in the mean and median values.
+
+### 6.1 Evaluating the Performance of Under-Sampling Method
+
+To evaluate the performance of these different sampling techniques, I estimated a restricted model just like Model 2 and used a cut-off probability of 0.5 to make it easily comparable to the scores of Model 2 in Section 4.
+
+```{r model4 undersamp restricted}
+model4 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree, 
+              data = undersample$data, 
+              family = binomial(link = "logit"))
+
+stargazer(model4, 
+          type = "text", 
+          title = "Logit Regression Output for Under-Sampling Method")
+```
+
+```{r prob model4 and conMat}
+prob.model4 <- predict(model4, type = "response")
+
+prediction.model4 <- as.factor(ifelse(prob.model4 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model4,
+                reference = undersample$data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### 6.2 Evaluating the Performance of Over-Sampling Method
+
+```{r model5 oversamp restricted}
+model5 <- glm(diabetes == "pos" ~ pregnant + glucose + mass + pedigree,
+              data = oversample$data,
+              family = binomial(link = "logit"))
+
+stargazer(model5, 
+          type = "text", 
+          title = "Logit Regression Output for Over-Sampling Method")
+```
+
+```{r prob model5 and conMat}
+prob.model5 <- predict(model5, type = "response")
+
+prediction.model5 <- as.factor(ifelse(prob.model5 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model5,
+                reference = oversample$data$diabetes,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### 6.3 Evaluating the Performance of SMOTE Method
+
+```{r model6 smote restricted}
+model6 <- glm(class == "pos" ~ pregnant + glucose + mass + pedigree,
+              data = smote_data,
+              family = binomial(link = "logit"))
+
+stargazer(model6, 
+          type = "text", 
+          title = "Logit Regression Output for SMOTE Method")
+```
+
+```{r prob model6 and conMat}
+prob.model6 <- predict(model6, type = "response")
+
+prediction.model6 <- as.factor(ifelse(prob.model6 > 0.5, "pos", "neg"))
+
+confusionMatrix(data = prediction.model6,
+                reference = smote_data$class,
+                dnn = c("Predicted", "Actual"),
+                positive = "pos", mode = "everything")
+```
+
+### 6.4 Summary of Performance of Re-Sampling Imbalanced Data
+
+Compared to Model 2's performance in Section 4, all 3 models showed higher Precision, Recall and F1 scores. Since these are all ratios, they The reason for not using ROC and the Precision-Recall curves to determine a more appropriate probability cut-off value is because it will be rather subjective, unless we use benchmark, for example maximum accuracy or maximum area under the ROC curve. 
+
+However, what I did not do was to test out-of-sample prediction since I wanted this to be an introduction to the methods of binary classification using logistic regression. I will provide a more comprehensive application of logistic regression in binary classification in another project using another dataset that would be more challenging, with the imbalance more heavily skewed to one class than the other. 
+
+## References
+
+<https://www.statisticssolutions.com/free-resources/directory-of-statistical-analyses/assumptions-of-logistic-regression/>
+
+<https://towardsdatascience.com/assumptions-of-logistic-regression-clearly-explained-44d85a22b290>
+
+<https://www.statology.org/assumptions-of-logistic-regression/>
+
+<https://www.theanalysisfactor.com/outliers-to-drop-or-not-to-drop/>
+
+<https://ademos.people.uic.edu/Chapter22.html>
+
+<https://developers.google.com/machine-learning/crash-course/classification/roc-and-auc>
+
+<https://machinelearningmastery.com/roc-curves-and-precision-recall-curves-for-classification-in-python/#:~:text=A%20precision%2Drecall%20curve%20is,constant%20class%20in%20all%20cases.>
+
+<https://www.analyticsvidhya.com/blog/2016/03/practical-guide-deal-imbalanced-classification-problems/>

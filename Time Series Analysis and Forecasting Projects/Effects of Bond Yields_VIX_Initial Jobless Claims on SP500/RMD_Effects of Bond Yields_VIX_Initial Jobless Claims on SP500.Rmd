@@ -1,0 +1,635 @@
+---
+title: "Effects of Bond Yields, VIX and Initial Jobless Claims on S&P 500"
+author: "Tan Zheng Liang"
+date: "2022-07-21"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
+    code_folding: show
+    highlight: tango
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The purpose of this project is to study the combined effects of bond yields, in particular the 10Y/2Y Treasury Yield Spread, the CBOE Volatility Index, and the U.S. Initial Jobless Claims on the S&P 500, measured using the SPDR S&P 500 ETF (SPY) closing price. It uses an Autoregressive Distributed Lags model to estimate the SPY returns and forecast the returns for the 4 weeks in June 2022. 
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(ARDL) # For ARDL models lag selection
+library(corrplot) # For visualizing correlation between variables
+library(dLagM) # For ARDL models and forecasting
+library(dplyr) # For data manipulation
+library(forecast) # For ARIMA model and evaluation metrics
+library(lubridate) # For manipulating time series objects
+library(quantmod) # For obtaining historical data from Yahoo Finance and FRED
+library(urca) # For unit root tests
+library(stargazer) # For tidy regression output and tables, where possible
+```
+
+## 3 Description of Variables
+
+In this section, I briefly described the four variables that were used in the project and their expected univariate relationship with the S&P 500. I would be using the weekly data of each variable since data for Initial Jobless Claims is released weekly.
+
+### 3.1 SPDR S&P 500 ETF
+
+The S&P 500 Index (ticker in Yahoo Finance: ^GSPC) measures the stock performance of the 500 largest companies listed in the U.S. by market capitalization and is usually used as a gauge of the overall U.S. stock market. The SPDR S&P 500 ETF (ticker: SPY) tracks this index and will be used as the dependent variable in the models that will be used in Section 4. 
+
+I have downloaded and stored the data into the object `spy_price`.
+
+```{r retrieve and store SPY price data}
+# Retrieve SPY historical data from Yahoo Finance using quantmod package
+
+# Set start and end date for data retrieval
+startdate <- as.Date("2000-01-03") # First trading day of year 2000
+enddate <- as.Date("2022-07-01") 
+
+spy_price <- getSymbols(Symbols = "SPY", 
+                        src = "yahoo", 
+                        auto.assign = F, 
+                        from = startdate, to = enddate, 
+                        periodicity = "weekly")
+
+# Show first and last 6 observations
+head(spy_price); tail(spy_price)
+
+# Number of rows of data
+nrow(spy_price)
+
+# Check for missing data
+colSums(is.na(spy_price))
+```
+
+The dates can be a little misleading when downloading weekly data but here is what each column refers to:
+
+1. Date: Date of the observation, set as Monday (first trading day of year 2000)
+2. SPY.Open: Opening price of the week on Monday
+3. SPY.High: Highest price during the week
+4. SPY.Low: Lowest price during the week
+5. SPY.Close: Closing price of the week on Friday (except last observation which is last trading day of June 2022), adjusted for splits
+6. SPY.Volume: Total volume traded during the week
+7. SPY.Adjusted: Closing price of the week (except last observation which is last trading day of June 2022), adjusted for splits and dividends
+
+If we want returns to be similar to the S&P 500 Index, the unadjusted closing price should be used since the index does not give the total return which includes dividends. Accounting for dividends would reduce losses during bad times and increase gains during good times, which does not reflect the week-to-week movement of the index. Since the purpose of the project is to predict U.S. stock market, unadjusted closing price is used.
+
+Plot of SPY over the years:
+
+```{r plot price data of SPY, fig.align='center'}
+spy_close <- spy_price[,"SPY.Close"] %>% 
+  `colnames<-`("SPY")
+
+plot(spy_close, main = "SPY Weekly Closing Price")
+```
+
+Since this is a time series analysis, we should also check for stationarity of our data. The chart shows that the series is not stationary and it can be checked with the Augmented Dickey Fuller and KPSS Tests.
+
+```{r check for stationarity of SPY price}
+# Add deterministic trend to tests since the chart seems to show it
+
+spy_close %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
+
+spy_close %>% urca::ur.kpss(type = "tau", lags = "long") %>% summary()
+```
+
+ADF test is unable to reject the null hypothesis which claimed that there is unit root (-1.90 vs -3.41, left-tailed test) and KPSS test rejected the null hypothesis which claimed that it is stationary (1.02 vs 0.146). I did the tests again with the weekly returns calculated from the unadjusted closing price using the simple/discrete method.
+
+```{r calculate discrete returns and check stationarity, fig.align='center'}
+# Calculate discrete returns, na.omit to remove first observation as it will return NA
+returns_spy <- na.omit(diff(x = spy_close, lag = 1, differences = 1) / stats::lag(x = spy_close, k = 1))
+
+nrow(returns_spy)
+
+plot(returns_spy, main = "SPY Weekly Returns")
+  
+returns_spy %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+returns_spy %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+With the discrete returns, ADF test rejects the null hypothesis (-24.31 vs -2.86) and KPSS test is unable to reject the null (0.31 vs 0.463). The return series, which is simply the first difference of the price data, is stationary.
+
+### 3.2 10Y/2Y Treasury Yield Spread
+
+The yield spread is the difference between the 2-year and 10-year treasury bonds, and is watched by many professionals as an early indicator of stock market downturns when the spread turns negative. This is because longer-dated bonds should have higher yields than bonds with shorter durations, so it is normal when the 10-year treasury yield is above the 2-year treasury yield. However, if the 2-year yield is higher than the 10-year yield, we have an inverted yield curve which signals that investors expect long-term interest rates to fall. This means that the yield spread and the S&P 500 should be negatively correlated.
+
+I have downloaded and stored the yield spread data into the object `tys`.
+
+```{r retrieve and store yield spread data}
+# Retrieve 10Y/2Y Treasury Yield Spread from St. Louis Fed's FRED using quantmod package
+
+tys <- getSymbols(Symbols = "T10Y2Y", src = "FRED", auto.assign = F, from = startdate, to = enddate, periodicity = "weekly")
+
+head(tys); tail(tys)
+```
+
+The data retrieved from FRED was not automatically converted by the **`quantmod`** package to weekly data, as compared to the SPY ETF data retrieved from Yahoo Finance. Furthermore, the **`from`** and **`to`** arguments does not work when retrieving FRED data. I manually adjusted this to match the SPY price data output above.
+
+```{r adjusting yield spread data}
+# 1. Adjust data collected to start from 2000 and end in 2022
+
+tys <- tys["2000/2022-06",] %>% 
+  `colnames<-`("TYS")
+
+# 2. Check for missing data. Replace NAs with prior observation.
+
+sum(is.na(tys))
+clean_tys <- na.locf(object = tys)
+
+# 3. Change daily frequency to weekly frequency (since SPY closing price is Friday, we extract Friday data)
+# But last observation in closing price is the last trading day of June 2022, so remember to add that in
+
+# Indicate week_start = 1 for week to start on Monday
+weekly_tys <- rbind(clean_tys[wday(clean_tys, week_start = 1) == 5], last(clean_tys))
+
+# Third, adjust dates since second step will return dates on Friday
+
+index(weekly_tys) <- index(spy_close)
+
+head(weekly_tys); tail(weekly_tys); nrow(weekly_tys)
+```
+
+Plot SPY Closing Price and 10Y/2Y Treasury Yield Spread over time: 
+
+```{r plot SPY price and yield spread, fig.align='center'}
+plot(merge(spy_close, weekly_tys), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and 10Y/2Y Treasury Yield Spread")
+```
+
+We can see that the yield spread is negative before the stock market collapsed in the early 2000s and in 2008/2009, and the spread peaked around the bottom of the stock market. The yield spread does not seem to be stationary.
+
+```{r stationarity of yield spread}
+weekly_tys %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+weekly_tys %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+ADF test shows that we cannot reject the null hypothesis (-1.43 vs -2.86), so unit root is present in the series. KPSS test shows that the null hypothesis is rejected (0.52 vs 0.463), so the series is not stationary.
+
+Since the yield spread is stated in percentage, I would simply take the first difference which would refer to the week-to-week changes in yield spread.
+
+```{r calculate first diff of yield spread and test for stationarity, fig.align='center'}
+# Remove first observation since it will return NA after taking first difference
+diff_tys <- na.omit(diff(x = weekly_tys, lag = 1, differences = 1))
+
+nrow(diff_tys)
+
+plot(diff_tys, main = "First-Difference of 10Y/2Y Treasury Yield Spread")
+  
+diff_tys %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+diff_tys %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+After taking first difference, the number of observations is the same as `returns_spy`, and ADF and KPSS test show that the series is stationary.
+
+### 3.3 CBOE Volatility Index
+
+The CBOE Volatility Index, commonly known as VIX, is used to assess volatility of the S&P 500 Index. A higher VIX value would mean greater fear and uncertainty in the market.
+
+The VIX data is stored into `vix`.
+
+```{r retrieve and store VIX data}
+# Retrieve VIX from FRED, adjustment of data is similar to the yield spread
+
+vix <- getSymbols(Symbols = "VIXCLS", src = "FRED", auto.assign = F)
+
+vix <- vix["2000/2022-06",] %>%
+  `colnames<-`("VIX")
+
+# Check for missing data and replace with prior observation
+sum(is.na(vix))
+clean_vix <- na.locf(object = vix)
+
+weekly_vix <- rbind(clean_vix[wday(clean_vix, week_start = 1) == 5], last(clean_vix))
+
+index(weekly_vix) <- index(spy_close)
+
+head(weekly_vix); tail(weekly_vix); nrow(weekly_vix)
+```
+
+Plot SPY Closing Price and VIX over time: 
+
+```{r plot SPY price and VIX, fig.align='center'}
+plot(merge(spy_close, weekly_vix), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and VIX")
+```
+
+The chart shows that VIX is higher during stock market crashes, and tends to be around 10 to 30 when the stock market is growing (2004-2007 and 2013-2019). The correlation between VIX and S&P 500 is expected to be negative.
+
+Check for stationarity of VIX series:
+
+```{r stationarity of VIX}
+weekly_vix %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+weekly_vix %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+Based on the ADF and KPSS tests, the VIX series at level is stationary with a drift.
+
+### 3.4 U.S. Initial Jobless Claims
+
+The U.S. Initial Jobless Claims is a weekly economic data measuring the number of people filing for unemployment claims for the first time in the past week. A growth in initial jobless claims is typically seen just before and during a recession, and gradually decline as the economy recovers.
+
+I stored the data into `ijc`.
+
+```{r retrieve and store initial jobless claims data}
+# Retrieve initial jobless claims from FRED, adjustment of data is similar to the yield spread
+
+ijc <- getSymbols(Symbols = "ICSA", src = "FRED", auto.assign = F)
+
+ijc <- ijc["2000/2022-06",] %>%
+  `colnames<-`("IJC")
+
+# Check for missing data
+sum(is.na(ijc))
+
+nrow(ijc) 
+
+# Initial Jobless Claims is weekly data, but adjust the dates so that it can be plotted
+# and merged into same object with other data later.
+index(ijc) <- index(spy_close)
+
+head(ijc); tail(ijc)
+```
+
+Plot SPY Closing Price and Initial Jobless Claims over time: 
+
+```{r plot SPY price and IJC, fig.align='center'}
+plot(merge(spy_close, ijc), multi.panel = T, yaxis.same = F, main = "SPY Closing Price and Initial Jobless Claims")
+```
+
+Due to the COVID-19 pandemic beginning in early 2020, there was an influx of initial unemployment claims that caused the historical patterns of claims to look flat. Such an increase in numbers may affect the estimated models.
+
+```{r SPY and VIX before 2020, fig.align='center'}
+plot(merge(spy_close, ijc)["/2019",], multi.panel = T, yaxis.same = F, main = "SPY and Initial Jobless Claims Before 2020")
+```
+
+The chart of SPY and Initial Jobless Claims before 2020 shows unemployment claims is high during the stock market crashes in early 2000s and in 2008/2009. This makes sense, and we expect the unemployment claims to be negatively correlated with the S&P 500.
+
+To check for stationarity in the series, I only used data before 2020 since the extremely high unemployment claims during the COVID-19 pandemic will likely cause the series to be tested as stationary even when it is not.
+
+```{r stationarity of initial jobless claims}
+ijc["/2019",] %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+ijc["/2019",] %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+The ADF test tells us that the null hypothesis cannot be rejected (-2.18 vs -2.86) and KPSS test tells us that the null hypothesis is rejected (1.51 vs 0.463). Therefore, the series is not stationary at levels.
+
+I conducted the ADF and KPSS tests on the growth in initial jobless claims, which is the first-difference of the series.
+
+```{r calculate growth of ijc and check for stationarity}
+# Take difference of data at time t and t-1 and divide by data at time t-1
+# Gives us the growth in initial jobless claims (in decimal format)
+# Remove first observation since it will return NA 
+ijc_growth <- na.omit(diff(x = ijc, lag = 1, differences = 1) / stats::lag(x = ijc, k = 1))
+
+head(ijc_growth)
+
+nrow(ijc_growth)
+
+ijc_growth["/2019",] %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+ijc_growth["/2019",] %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+```
+
+The ADF and KPSS tests show that the growth rate in initial jobless claims is stationary.
+
+### 3.5 Summary
+
+To summarize what had been done in this section, I discussed how the yield spread, the VIX and initial jobless claims would correlate with the S&P 500. I also carried out the ADF and KPSS tests and found that only the VIX is stationary at levels, while the other three variables are stationary at first difference. Understanding the order of integration allows us to find out if we should test for cointegration, which is not needed unless we are are only estimating the effects of the yield spread and initial jobless claims on the S&P 500.
+
+The correlation heatmaps shows how the data at levels and the stationary data correlate with other variables in their respective groups.
+
+```{r correlation heatmaps, fig.align='center'}
+corr_level <- cor(x = merge(spy_close, weekly_tys, weekly_vix, ijc), method = "spearman")
+
+corrplot(corr = corr_level, method = "color", type = "lower", title = "Correlation of variables at level", addCoef.col = "black", mar = c(1,1,2,1))
+
+# Remove first row of weekly_vix because it did not require differencing, so it had an additional first observation
+corr_stationary <- cor(x = merge(returns_spy, diff_tys, weekly_vix[-1,], ijc_growth), method = "spearman")
+
+corrplot(corr = corr_stationary, method = "color", type = "lower", title = "Correlation of stationary variables", addCoef.col = "black", mar = c(1,1,2,1))
+```
+
+When all variables are at levels, TYS, VIX and IJC were negatively correlated to SPY as I had expected. But the stationary variables paint a different picture. The weekly change in TYS was positively correlated with SPY returns, VIX negatively correlated with SPY returns, and weekly percentage change in IJC was slightly negatively correlated with SPY returns. 
+
+## 4 Building the Regression Models
+
+In this section, three different types of regression models will be created with `returns_spy` as the dependent variable, namely an ARMA model, ARDL models with one independent variable and ARDL model with all independent variables.
+
+For all model types, I used stationary data up to end-May 2022 as a training set and June 2022 as the test set to evaluate forecast performance.
+
+### 4.1 Autoregressive Moving Average (ARMA) Model
+
+The ARMA model is the simplest model to estimate, since it only uses the lags of the dependent variable and the lags of the error term. A plot of the autocorrelation function (ACF) and partial autocorrelation function (PACF) of the dependent variable can provide some information about the number of lags to choose from.
+
+```{r ACF and PACF plot, fig.align='center'}
+par(mfrow = c(2,1), mar = c(2,3,4,2))
+
+forecast::Acf(x = returns_spy["/2022-05",], main = "ACF of SPY Returns")
+
+forecast::Pacf(x = returns_spy["/2022-05",], main = "PACF of SPY Returns")
+```
+
+The ACF and PACF suggested an ARMA(3, 3) or ARMA(4, 4) model would be a good starting point to select the number of AR and MA lags, but that seems to be a very long model. Therefore, I will simply use the **`auto.arima`** function to choose an ARMA(p, q) model with the lowest Akaike Information Criterion (AIC).
+
+```{r ARMA(p,q) model}
+arma <- forecast::auto.arima(y = returns_spy["/2022-05",], 
+                             max.p = 4, max.q = 4, 
+                             ic = "aic", 
+                             stepwise = F, approximation = F, 
+                             trace = F)
+
+arma
+```
+
+The estimated ARMA(p, q) model is:
+
+$$
+\hat{r}_t = 0.0012 - 0.0764u_{t-1} + 0.0463u_{t-2} - 0.0762u_{t-3} - 0.0579u_{t-4}
+$$
+
+Plot of actual and fitted values:
+
+```{r plot of actual and arma fitted values, fig.align='center'}
+plot.zoo(returns_spy["/2022-05",], 
+         col = "black", type = "l", lwd = 2, 
+         ylab = "SPY Returns", xlab = "Time", 
+         main = "Fitted SPY Returns Using ARMA")
+
+lines(zoo(x = fitted(arma), order.by = index(returns_spy["/2022-05",])), col = "red", type = "l", lwd = 1.5)
+
+legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
+```
+
+### 4.2 Autoregressive Distributed Lag (ARDL) Model With One Independent Variable
+
+I would build three ARDL models, one for each independent variable. This is to test how the variables affect the SPY returns individually. For this, I would use the **`auto_ardl`** function in the **`ARDL`** package.
+
+#### 4.2.1 Regress SPY Returns on Treasury Yield Spread
+
+```{r SPY returns and treasury yield spread}
+# max_order = 4 to indicate maximum lag in the search for all variables is 4
+# possible to state a vector of length equal to no. of variables in max_order
+# grid = T to to prevent stepwise search of models
+
+spytys <- ARDL::auto_ardl(formula = SPY ~ TYS, 
+                          data = as.zoo(merge(returns_spy, diff_tys)["/2022-05",]), 
+                          max_order = 4, 
+                          selection = "AIC", grid = T)
+
+summary(spytys$best_model)
+```
+
+The estimated model is:
+
+$$
+\hat{r}_t = 0.0013 - 0.0625r_{t-1} + 0.0236TYS_t - 0.0304TYS_{t-1}
+$$
+
+Based on the estimated coefficients, the Treasury Yield Spread at time $t$ has positive impact on SPY returns but the Treasury Yield Spread at time $t-1$ has a negative impact on SPY returns. The low Adjusted R-squared value means that the weekly change in TYS does not explain SPY returns well.
+
+Plot of actual and fitted values:
+
+```{r plot of actual and SPYTYS fitted values, fig.align='center'}
+plot.zoo(returns_spy["/2022-05",], 
+         col = "black", type = "l", lwd = 2, 
+         ylab = "SPY Returns", xlab = "Time", 
+         main = "Regressing SPY Returns on Weekly Change in TYS")
+
+# NA for first value as the lag used reduces observations by 1
+lines(fitted(spytys$best_model), col = "red", type = "l", lwd = 1.5)
+
+legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
+```
+
+#### 4.2.2 Regress SPY Returns on VIX
+
+```{r SPY returns and VIX}
+spyvix <- ARDL::auto_ardl(formula = SPY ~ VIX, 
+                          data = as.zoo(merge(returns_spy, weekly_vix[-1,])["/2022-05",]), 
+                          max_order = 4, 
+                          selection = "AIC", grid = T)
+
+summary(spyvix$best_model)
+```
+
+The estimated model is:
+
+$$
+\begin{aligned}
+\hat{r}_t = &0.0078 -0.1384r_{t-1} -0.0096r_{t-2} -0.1013r_{t-3} \\ &-0.0060VIX_t + 0.0044VIX_{t-1} + 0.0009VIX_{t-2} -0.0005VIX_{t-3} + 0.0008VIX_{t-4}
+\end{aligned}
+$$
+
+Unlike what we had thought about the negative correlation between SPY returns and VIX, most of the lags of VIX suggested that higher VIX values generally increases SPY returns.
+
+Plot of actual and fitted values:
+
+```{r plot of actual and SPYVIX fitted values, fig.align='center'}
+plot.zoo(returns_spy["/2022-05",], 
+         col = "black", type = "l", lwd = 2, 
+         ylab = "SPY Returns", xlab = "Time", 
+         main = "Regressing SPY Returns on VIX")
+
+# NA for first 4 values as the lag used reduces observations by 4
+lines(fitted(spyvix$best_model), col = "red", type = "l", lwd = 1.5)
+
+legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
+```
+
+#### 4.2.3 Regress SPY Returns on Initial Jobless Claims
+
+```{r SPY returns and IJC}
+spyijc <- ARDL::auto_ardl(formula = SPY ~ IJC, 
+                          data = as.zoo(merge(returns_spy, ijc_growth)["/2022-05",]), 
+                          max_order = 4, 
+                          selection = "AIC", grid = T)
+
+summary(spyijc$best_model)
+```
+
+The estimated model is:
+
+$$
+\hat{r}_t = 0.0012 -0.0524r_{t-1} + 0.0327r_{t-2} -0.0411r_{t-3} + 0.0075IJC_t -0.0020IJC_{t-1} + 0.0086IJC_{t-2}
+$$
+
+The low Adjusted R-Squared value means that the weekly percentage change in Initial Jobless Claims does not explain SPY Returns well. If we simply look at the coefficients of IJC and its lags, an increase in initial jobless claims seemed to generally increase SPY returns.
+
+Plot of actual and fitted values:
+
+```{r plot of actual and SPYIJC fitted values, fig.align='center'}
+plot.zoo(returns_spy["/2022-05",], 
+         col = "black", type = "l", lwd = 2, 
+         ylab = "SPY Returns", xlab = "Time", 
+         main = "Regressing SPY Returns on Weekly Percentage Change in IJC")
+
+# NA for first 3 values as the lag used reduces observations by 3
+lines(fitted(spyijc$best_model), col = "red", type = "l", lwd = 1.5)
+
+legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
+```
+
+### 4.3 ARDL Model With All Independent Variables
+
+The process for building this model is the same as the ARDL models with one independent variable.
+
+```{r ARDL with multiple independent variables}
+spyall <- ARDL::auto_ardl(formula = SPY ~ TYS + VIX + IJC, 
+                          data = as.zoo(merge(returns_spy, diff_tys, weekly_vix[-1,], ijc_growth)["/2022-05",]), 
+                          max_order = 4, 
+                          selection = "AIC", grid = T)
+
+summary(spyall$best_model)
+```
+
+Based on ARDL automatic selection, the model with the lowest AIC is rather complex. In short, adding 4 lags each of SPY returns, VIX and initial jobless claims, as well as the contemporaneous treasury yield spread leads to the best model.
+
+Plot of actual and fitted values:
+
+```{r plot of actual and SPY_ALL fitted values, fig.align='center'}
+plot.zoo(returns_spy["/2022-05",], 
+         col = "black", type = "l", lwd = 2, 
+         ylab = "SPY Returns", xlab = "Time", 
+         main = "Regressing SPY Returns on All Independent Variables")
+
+# NA for first 4 values as the lag used reduces observations by 4
+lines(fitted(spyall$best_model), col = "red", type = "l", lwd = 1.5)
+
+legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
+```
+
+## 5 Model Evaluation
+
+In this section, I evaluated the out-of-sample forecasting accuracy for the ARMA model and the ARDL with all independent variables model. I forecasted 4 periods ahead since the test set containing June 2022 SPY returns only has 4 observations.
+
+### 5.1 ARMA Model
+
+```{r forecast ARMA model}
+f_arma <- forecast::forecast(object = arma, h = 4, level = 95)
+
+stargazer(as.data.frame(f_arma), 
+          type = "text", 
+          title = "Forecasted SPY Returns for June 2022 Using ARMA Model",
+          summary = F)
+
+stargazer(forecast::accuracy(f_arma, x = returns_spy["2022-06"]), 
+          type = "text", 
+          title = "Evaluation of ARMA Model Forecast")
+```
+
+For the evaluation metrics, Root Mean Squared Error (RMSE) and Mean Absolute Error (MAE) is the simplest to understand. The Mean Percentage Error (MPE) and Mean Absolute Percentage Error (MAPE) is not particularly useful in our case since the forecasted values tend to be very small, which inflates these measures. 
+
+Plot forecasted and actual SPY at level (price data):
+
+```{r plot forecast of ARMA model, fig.align='center'}
+# Add in-sample periods Jan to May 2022, and out-of-sample period Jun 2022 (26 observations)
+# Bind actual with forecasted values 
+
+f_arma.level <- zoo(x = cbind(fspy = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_arma$mean),
+                              fspy_lower = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_arma$lower),
+                              fspy_upper = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_arma$upper)),
+                    order.by = index(spy_close["2022-06",]))
+
+plot.zoo(cbind(f_arma.level, spy_close["2022-06",], spy_close["2022-01/2022-05",]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 2, 
+         ylab = "SPY Weekly Close Price", main = "Actual and Forecasted SPY Price Using ARMA Model")
+
+legend(x = "bottomleft", 
+       legend = c("Forecasted Price", "Lower and Upper Bound", "Actual Price June 2022", "Actual Price in Train Period"), 
+       col = c("red", "gray", "blue", "black"), lwd = 1.5)
+```
+
+### 5.2 ARDL Model
+
+For the ARDL model, more steps are required to obtain a forecast since the **`forecast`** function used in the ARMA model does not work with ARDL models, and the **`ARDL`** package does not have a function for it. I would be using the **`dLagM`** package and the forecast function available in it.
+
+```{r ARDL using dLagM}
+# Using dLagM package to create same ARDL model as per Section 4.3
+spyall.new <- dLagM::ardlDlm(formula = SPY ~ TYS + VIX + IJC, 
+                             data = data.frame(merge(returns_spy, diff_tys, weekly_vix[-1,], ijc_growth)["/2022-05",]), 
+                             p = 4, q = 4, 
+                             remove = list(p = list(TYS = c(1:4)))) # Remove all lags of TYS
+
+stargazer(spyall.new$model, type = "text",
+          title = "ARDL Regression Using dLagM Package", 
+          dep.var.labels.include = F, 
+          column.labels = "SPY.t")
+```
+
+```{r forecast ARDL model}
+# Create matrix containing values of exogenous variables during forecast period
+# Number of columns = forecast period, Number of rows = exogenous variables
+x.new = rbind(as.vector(diff_tys["2022-06",]),
+              as.vector(weekly_vix["2022-06",]),
+              as.vector(ijc_growth["2022-06",]))
+
+f_ardl <- dLagM::forecast(model = spyall.new, x = x.new, h = 4, interval = T, level = 0.95)
+
+stargazer(f_ardl$forecasts, 
+          type = "text", 
+          title = "Forecasted SPY Returns for June 2022 Using ARDL Model",
+          summary = F)
+```
+
+To calculate the the forecast accuracy measures using the **`accuracy`** function, we need to "trick" the function into thinking it is an object of class "forecast".
+
+```{r create forecast class structure}
+f_ardl.new <- structure(list(level = 95,
+                             mean = f_ardl$forecasts$Forecast,
+                             lower = f_ardl$forecasts$`95% LB`,
+                             upper = f_ardl$forecasts$`95% UB`,
+                             x = returns_spy["/2022-05",],
+                             fitted = c(rep(NA, 4), spyall.new$model$fitted.values),
+                             residuals = spyall.new$model$residuals),
+                        class = "forecast")
+
+stargazer(forecast::accuracy(object = f_ardl.new, x = returns_spy["2022-06"]), 
+          type = "text", 
+          title = "Evaluation of ARDL Model Forecast")
+```
+
+Plot forecasted and actual SPY at level (price data):
+
+```{r plot forecast of ARDL model, fig.align='center'}
+f_ardl.level <- zoo(x = cbind(fspy = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$mean),
+                              fspy_lower = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$lower),
+                              fspy_upper = as.vector(last(spy_close["2022-05",])) * cumprod(1 + f_ardl.new$upper)),
+                    order.by = index(spy_close["2022-06",]))
+
+plot.zoo(cbind(f_ardl.level, spy_close["2022-06",], spy_close["2022-01/2022-05",]), 
+         plot.type = "single", 
+         col = c("red", "gray", "gray", "blue", "black"), lwd = 2, 
+         ylab = "SPY Weekly Close Price", main = "Actual and Forecasted SPY Price Using ARDL Model")
+
+legend(x = "bottomleft", 
+       legend = c("Forecasted Price", "Lower and Upper Bound", "Actual Price June 2022", "Actual Price in Train Period"), 
+       col = c("red", "gray", "blue", "black"), lwd = 1.5)
+```
+
+The forecast assumes that we have data of the exogenous variables in the forecast period. In reality, we do not have such data, and we would require forecasts of the exogenous variables, which would also decrease the accuracy of the forecasted points and the prediction intervals. This highlights the difficulty of producing accurate forecasts of short-term stock market movements, especially for longer periods.
+
+## 6 Final Remarks
+
+The ARDL model created in Section 4.3 suggested that past values of the 10Y/2Y Treasury Yield Spread does not explain current SPY returns. This is surprising as I had thought that that knowing the past few yield spread data would help in predicting the current SPY returns. 
+
+The models in this project does not consider the effects of structural breaks, where relationships between variables may change due to exogenous factors. A regression model using rolling-window estimation is one of the simpler methods to capture these changes. I would explore the effectiveness of rolling-window estimation in another project and see how it performs compared to a fixed-window estimation. 
+
+## References
+
+Chicago Board Options Exchange, CBOE Volatility Index: VIX [VIXCLS], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/VIXCLS, July 16, 2022.
+
+Federal Reserve Bank of St. Louis, 10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity [T10Y2Y], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/T10Y2Y, July 15, 2022.
+
+Kenton, W. (2022). The S&P 500 Index: Standard & Poor's 500 Index. Retrieved from https://www.investopedia.com/terms/s/sp500.asp
+
+U.S. Employment and Training Administration, Initial Claims [ICSA], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/ICSA, July 15, 2022.
+
+Walden, S. (2022). Inverted Yield Curve. Retrieved from https://www.investopedia.com/terms/i/invertedyieldcurve.asp.

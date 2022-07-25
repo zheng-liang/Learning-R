@@ -1,0 +1,429 @@
+---
+title: "Random Selection, Expertise and Index Investing"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show 
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The aim of this project is to find out if portfolios made of 15 randomly selected stocks from the S&P500 Large-Cap Index can outperform stock-picking experts and index investing. The portfolios were optimized based on the mean-variance framework developed by Harry Markowitz for simplicity, with the goal of maximizing the ex-post Sharpe Ratio during the optimization period.
+
+The project is meant to be a fun/thought experiment, and is not meant to disprove of index or active investing. It does not make use of any statistical methods to prove that random selection, expertise or index investing is a better choice.
+
+Under each main section heading, there are tabs that can be used to navigate to sub-sections.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(RColorBrewer) # For color palettes in plots
+library(ROI) # For ROI solver in portfolio optimization
+library(ROI.plugin.glpk) # Part of the ROI solver for linear optimization
+library(ROI.plugin.quadprog) #Part of the ROI solver for quadratic optimization
+library(tidyquant) # For quantmod and PerformanceAnalytics functions
+library(tidyverse) # For dplyr and ggplot2 functions (data manipulation and plotting)
+```
+
+## 3 Retrieve Index Components and Price Data {.tabset .tabset-pills}
+
+### 3.1 Index Components
+
+The components of S&P500 can be obtained using **`tidyquant::tq_index()`**. 
+
+```{r get index components using tidyquant, message=FALSE}
+# Only require ticker and maybe name of company, which is columns 1 and 2 of query result
+
+sp500 <- tidyquant::tq_index(x = "SP500")[,1:2]
+
+sp500
+
+tickers <- sp500$symbol
+```
+
+### 3.2 Price Data
+
+Using **`quantmod::getSymbols()`**, I retrieved the daily adjusted closing prices of the tickers from Yahoo Finance, starting from 1 January 2015 to 1 July 2022.
+
+```{r retrieve price data, warning=FALSE}
+startdate <- as.Date("2015-01-01")
+enddate <- as.Date("2022-07-01")
+
+prices <- NULL
+
+for (t in tickers) {   # Use for loop to get prices of all tickers
+   
+   tmp <- NULL
+  
+   tmp <- try(   # Use try function to skip loop and return error message when price cannot be retrieved
+       expr = {quantmod::getSymbols(Symbols = t, src = "yahoo", auto.assign = FALSE, 
+                                    from = startdate, to = enddate, periodicity = "daily")[,6]},
+       silent = TRUE
+   )
+   
+   if(inherits(tmp, "try-error")) {cat("ERROR:", t, sep = " "); next}
+   
+   names(tmp) <- t
+   
+   prices <- cbind(prices, tmp)
+}
+
+# Check dimension of object, start and end date of data collected
+dim(prices); start(prices); end(prices)
+```
+
+The download has failed for `BRK.B (Berkshire Hathaway)` and `BF.B (Brown-Forman Corporation)` because the tickers in Yahoo Finance are `BRK-B` and `BF-B` respectively. I used the correct tickers to retrieve their data and added them to `prices`. I also checked which stocks had NA over the specified period and removed them from `prices`.
+
+```{r add BRK-B and BF-B}
+prices <- cbind(quantmod::getSymbols(Symbols = "BRK-B", src = "yahoo", auto.assign = F, 
+                                     from = startdate, to = enddate, periodicity = "daily")[,6],
+                quantmod::getSymbols(Symbols = "BF-B", src = "yahoo", auto.assign = F, 
+                                     from = startdate, to = enddate, periodicity = "daily")[,6],
+                prices)
+
+colnames(prices)[1:2] <- c("BRK-B", "BF-B")
+
+# Check which stocks have NA over the specified period
+which(colSums(is.na(prices)) > 0)
+
+# Keep only stocks that do not have NAs over the specified period
+prices <- prices[, which(colSums(is.na(prices)) == 0)]
+
+dim(prices) # Left with 482 stocks
+```
+
+### 3.3 Sample Tickers for Portfolios
+
+15 tickers were sampled from `prices` without replacement each time, which will be used to create 10 portfolios at the end. The **`set.seed()`** allows the random sample to be reproducible.
+
+```{r create 10 portfolios with 10 tickers each}
+samp_stocks <- list()
+
+for (i in 1:10) {
+  set.seed((50+i)^2)
+  
+  samp_stocks[[i]] <- prices[, sample(x = ncol(prices), size = 15, replace = FALSE)]
+  
+  names(samp_stocks)[i] <- paste("S", i, "_prices", sep = "")
+}
+
+# Check stocks sampled into each portfolio
+sapply(samp_stocks, colnames)
+```
+
+## 4 Calculate Daily Stock Returns and Optimize Portfolios {.tabset .tabset-pills}
+
+### 4.1 Calculate Returns
+
+Discrete returns are used as it can be added across assets, unlike log-returns. Returns can be calculated using **`PerformanceAnalytics::Return.calculate()`** but since `samp_stocks` is a list object, the function needs to be used together with **`lapply()`**.
+
+```{r calculate returns for portfolios}
+stock_returns <- lapply(samp_stocks, function(x) {
+  na.omit(PerformanceAnalytics::Return.calculate(x, method = "discrete"))
+})
+
+names(stock_returns) <- paste("S", c(seq(1:10)), "_returns", sep = "")
+
+sapply(stock_returns, dim)
+
+# Show first 3 elements in stock_returns, first 5 columns of data
+lapply(stock_returns[1:3], function(x) {
+  head(x[, 1:5], n = 4)
+})
+```
+
+### 4.2 Create Portfolio Specification
+
+Using **`PortfolioAnalytics::portfolio.spec()`**, portfolio specification for the mean-variance framework can be created. Because each portfolio contains different assets, we need to create 10 specifications for optimization.
+
+```{r create mean-variance portfolio specification}
+portspecs <- list()
+
+for (s in 1:10) {
+  # Initialize portfolio specification
+  portspecs[[s]] <- PortfolioAnalytics::portfolio.spec(assets = names(stock_returns[[s]]))
+  
+  # Sum of weights constrained to 1, can also specify as type = "full investment"
+  portspecs[[s]] <- add.constraint(portspecs[[s]], 
+                                       type = "weight_sum",
+                                       min_sum= 1, max_sum = 1)
+
+  # Weight constraint on each stock, max is 15% of portfolio
+  portspecs[[s]] <- add.constraint(portspecs[[s]], 
+                                       type="box", 
+                                       min=0, max=0.15)
+  
+  # Objective to minimize risk based on variance (function will default to standard deviation as measure of risk)
+  portspecs[[s]] <- add.objective(portspecs[[s]],
+                                      type = "risk",
+                                      name = "var")
+  
+  # Adding a return objective, thus we maximize mean return per unit of risk
+  portspecs[[s]] <- add.objective(portspecs[[s]],
+                                      type = "return",
+                                      name = "mean")
+  
+  # Add name to specification to distinguish them
+  names(portspecs)[s] <- paste("P", s, "_spec", sep = "")
+}
+
+# Example of what portspecs contains
+portspecs$P1_spec
+```
+
+### 4.3 Optimize Portfolios
+
+The portfolios are optimized with **`PortfolioAnalytics::optimize.portfolio.rebalancing()`**, which re-optimizes the portfolios every specified period. The main arguments are **`rebalance_on`**, **`training_period`** and **`rolling_window`**. We can decide the frequency of rebalancing (“months”, “quarters”, and “years”), the number of periods used for optimization (specify an integer matching frequency of data, in this case daily) and the number of periods to roll the window used for optimization. I also added the argument **`maxSR = TRUE`** to maximize the Sharpe Ratio of the portfolios (the demo can be found [here](https://rdrr.io/cran/PortfolioAnalytics/src/demo/demo_max_Sharpe.R)). The function **`PortfolioAnalytics::optimize.portfolio()`** allows for single-period optimization. 
+
+```{r optimize portfolios, warning=FALSE}
+optports <- list()
+
+for (p in 1:10) {
+  optports[[p]] <- PortfolioAnalytics::optimize.portfolio.rebalancing(R = stock_returns[[p]], 
+                                                                      portfolio = portspecs[[p]], 
+                                                                      optimize_method = "ROI", 
+                                                                      rebalance_on = "quarters", 
+                                                                      training_period = 252, 
+                                                                      rolling_window = 125,
+                                                                      maxSR = TRUE)
+  
+  names(optports)[p] <- paste("P", p, "_optimal", sep = "")
+}
+
+# Example of what optports contains
+optports$P1_optimal
+```
+
+I used 252 periods for training/optimization and rolled the window forward every 125 days, so the portfolios are re-optimized based on previous 1 year (252 trading days) data every half-year (125 trading days) and re-balanced every quarter.
+
+### 4.4 Plot Weights Over Time
+
+Since the portfolio was re-optimized every half-year, the optimal weights selected using the mean-variance framework with a target of maximizing ex-post Sharpe Ratio should change over time. The weights of the Portfolio 1 are plotted below.
+
+```{r plot weights of first 4 portfolios}
+chart.Weights(object = optports[[1]], 
+              colorset = c(RColorBrewer::brewer.pal(n = 7, name = "Dark2"), RColorBrewer::brewer.pal(n = 8, name = "Accent")), 
+              main = "Portfolio 1 Component Weights")
+```
+
+## 5 Calculate Daily Portfolio Returns {.tabset .tabset-pills}
+
+### 5.1 Extract Weights
+
+To calculate daily portfolio returns, the daily weights of the portfolio are required and can be extracted from the optimal portfolios using **`PortfolioAnalytics::extractWeights()`**.
+
+```{r extract weights from portfolios}
+port_weights <- lapply(optports, FUN = PortfolioAnalytics::extractWeights)
+
+names(port_weights) <- paste("P", c(seq(1:10)), "_weights", sep = "")
+
+# Show first 3 elements in stock_returns, first 5 columns of data
+lapply(port_weights[1:3], function(x) {
+  head(x[, 1:5], n = 4)
+})
+```
+
+### 5.2 Calculate Returns
+
+**`PerformanceAnalytics::Return.portfolio()`** can be used to calculate the daily portfolio returns.
+
+```{r calculate daily portfolio returns}
+port_returns <- NULL
+
+for (r in 1:10) {
+  port_returns <- cbind(port_returns,
+                        PerformanceAnalytics::Return.portfolio(R = stock_returns[[r]], 
+                                                               weights = port_weights[[r]], 
+                                                               geometric = TRUE))
+  
+  names(port_returns)[r] <- paste("P", r, "_returns", sep = "")
+}
+
+head(port_returns)
+```
+
+## 6 Evaluate Performance Against Benchmarks {.tabset .tabset-pills}
+
+### 6.1 Benchmarks
+
+Since the aim of this project was to determine if portfolios of random stocks could outperform stock-picking experts and index investing, relevant proxies for benchmarking are required.
+
+The proxies are returns calculated from the Daily Adjusted Closing Prices of popular index or actively-managed Exchange-Traded Funds that have sizeable Total Assets Under Management screened from [etfdb.com](https://etfdb.com/). The actively-managed ETFs were filtered to have an inception date before 01 January 2015.
+
+The index ETFs chosen are: 
+
+1. SPDR S&P 500 ETF Trust (SPY)
+2. Vanguard Total Stock Market ETF (VTI)
+3. Invesco QQQ Trust (QQQ)
+4. iShares Russell 2000 ETF (IWM)
+5. iShares Core S&P Small-Cap ETF (IJR)
+6. iShares Core S&P Mid-Cap ETF (IJH)
+
+The actively-managed ETFs chosen are:
+
+1. ARK Innovation ETF (ARKK)
+2. ARK Genomic Revolution ETF (ARKG)
+3. First Trust North American Energy Infrastructure Fund (EMLP)
+4. ARK Next Generation Internet ETF (ARKW)
+5. ARK Autonomous Technology & Robotics ETF (ARKQ)
+
+```{r obtain adjusted closing prices of benchmarks}
+index_tickers <- c("SPY", "VTI", "QQQ", "IWM", "IJR", "IJH")
+
+index_prices <- NULL
+
+for (i in index_tickers) {
+  index_prices <- cbind(index_prices,
+                        quantmod::getSymbols(Symbols = i, src = "yahoo", auto.assign = FALSE, 
+                                             from = startdate, to = enddate, periodicity = "daily")[,6])
+}
+
+colnames(index_prices) <- index_tickers
+
+active_tickers <- c("ARKK", "ARKG", "EMLP", "ARKW", "ARKQ")
+
+active_prices <- NULL
+
+for (i in active_tickers) {
+  active_prices <- cbind(active_prices,
+                         quantmod::getSymbols(Symbols = i, src = "yahoo", auto.assign = FALSE, 
+                                             from = startdate, to = enddate, periodicity = "daily")[,6])
+}
+
+colnames(active_prices) <- active_tickers
+```
+
+### 6.2 Calculate Benchmark Daily Returns
+
+The discrete method was also applied to the calculation of benchmark returns for comparison of the cumulative return performance.
+
+```{r calculate benchmark daily returns}
+index_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = index_prices, method = "discrete"))
+
+head(index_returns, 4)
+
+active_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = active_prices, method = "discrete"))
+
+head(active_returns, 4)
+```
+
+### 6.3 Comparison Against Index Investing {.tabset}
+
+#### 6.3.1 Cumulative Returns
+
+```{r plot cum returns against index ETFs, message=FALSE, warning=FALSE}
+PerformanceAnalytics::chart.CumReturns(R = cbind(port_returns[,1:5], index_returns), 
+                                       geometric = TRUE,
+                                       main = "Cumulative Returns of Portfolios and Index ETFs", 
+                                       colorset = RColorBrewer::brewer.pal(n = 11, name = "Spectral"), 
+                                       plot.engine = "plotly")
+
+PerformanceAnalytics::chart.CumReturns(R = cbind(port_returns[,6:10], index_returns),
+                                       geometric = TRUE,
+                                       main = "Cumulative Returns of Portfolios and Index ETFs",
+                                       colorset = RColorBrewer::brewer.pal(n = 11, name = "Spectral"),
+                                       plot.engine = "plotly")
+```
+
+From the two charts, the `QQQ` ETF that tracks the NASDAQ-100 Index, which has a heavy focus on the technology sector, had higher cumulative returns than the other Index ETFs. The only portfolio that managed to outperform the`QQQ` ETF is Portfolio 2, which is made up of `r sp500[sp500$symbol %in% names(samp_stocks$S2_prices),]`.
+
+#### 6.3.2 Drawdowns
+
+```{r plot drawdowns against index ETFs, message=FALSE, warning=FALSE}
+PerformanceAnalytics::chart.Drawdown(R = cbind(port_returns[,1:5], index_returns), 
+                                     geometric = TRUE,
+                                     main = "Drawdowns of Portfolios and Index ETFs", 
+                                     colorset = RColorBrewer::brewer.pal(n = 11, name = "Spectral"), 
+                                     plot.engine = "plotly")
+
+PerformanceAnalytics::chart.Drawdown(R = cbind(port_returns[,6:10], index_returns),
+                                     geometric = TRUE,
+                                     main = "Drawdowns of Portfolios and Index ETFs",
+                                     colorset = RColorBrewer::brewer.pal(n = 11, name = "Spectral"),
+                                     plot.engine = "plotly")
+```
+
+In general, the `IWM`, `IJH` and `IJR` ETFs have larger drawdowns, since they track the small-cap and mid-cap companies in the U.S., which tends to be more volatile. The portfolios created from 10 randomly selected stocks had similar drawdowns to the ETFs.
+
+#### 6.3.3 Performance Tables
+
+```{r evaluation metrics against index ETFs}
+table.AnnualizedReturns(R = cbind(port_returns, index_returns), scale = 252, Rf = 0.025/252, geometric = TRUE, digits = 4)
+
+table.CAPM(Ra = port_returns, Rb = index_returns$SPY, scale = 252, Rf = 0.025/252, digits = 4)
+
+table.DownsideRisk(R = cbind(port_returns, index_returns), scale = 252, Rf = 0.025/252, MAR = 0.07/252, digits = 4)
+```
+
+For the metrics that require risk-free rate (Rf), I chose an annual rate of 2.5%. For the Minimum Acceptable Return (MAR) in calculating Downside Deviation, I used an annual rate of 7%, which is approximately the long-run inflation-adjusted return of the S&P500. Portfolio 2 had the highest annualized return and Sharpe Ratio and the lowest maximum drawdown.
+
+### 6.4 Comparison Against Actively-Managed ETFs {.tabset}
+
+#### 6.4.1 Cumulative Returns
+
+```{r plot cum returns against active ETFs, message=FALSE, warning=FALSE}
+PerformanceAnalytics::chart.CumReturns(R = cbind(port_returns[,1:5], active_returns), 
+                                       geometric = TRUE,
+                                       main = "Cumulative Returns of Portfolios and Active ETFs", 
+                                       colorset = RColorBrewer::brewer.pal(n = 10, name = "Spectral"), 
+                                       plot.engine = "plotly")
+
+PerformanceAnalytics::chart.CumReturns(R = cbind(port_returns[,6:10], active_returns),
+                                       geometric = TRUE,
+                                       main = "Cumulative Returns of Portfolios and Active ETFs",
+                                       colorset = RColorBrewer::brewer.pal(n = 10, name = "Spectral"),
+                                       plot.engine = "plotly")
+```
+
+The ARK ETFs (ARKK, ARKG, ARKW, ARKQ) had high cumulative returns during the 2020 to 2021 period, but were the most volatile as well. Portfolio 2, which did the best against Index ETFs, had better cumulative returns in 2022 than the ARK ETFs.
+
+#### 6.4.2 Drawdowns
+
+```{r plot drawdowns against active ETFs, message=FALSE, warning=FALSE}
+PerformanceAnalytics::chart.Drawdown(R = cbind(port_returns[,1:5], active_returns), 
+                                     geometric = TRUE,
+                                     main = "Drawdowns of Portfolios and Active ETFs", 
+                                     colorset = RColorBrewer::brewer.pal(n = 11, name = "Spectral"), 
+                                     plot.engine = "plotly")
+
+PerformanceAnalytics::chart.Drawdown(R = cbind(port_returns[,6:10], active_returns),
+                                     geometric = TRUE,
+                                     main = "Drawdowns of Portfolios and Active ETFs",
+                                     colorset = RColorBrewer::brewer.pal(n = 11, name = "Spectral"),
+                                     plot.engine = "plotly")
+```
+
+The ARK ETFs had the largest drawdowns since 2021. In comparison, the `EMLP` ETF and portfolios made of random stocks had lower drawdowns.
+
+#### 6.3.3 Performance Tables
+
+```{r evaluation metrics against active ETFs}
+table.AnnualizedReturns(R = cbind(port_returns, active_returns), scale = 252, Rf = 0.025/252, geometric = TRUE, digits = 4)
+
+table.CAPM(Ra = cbind(port_returns, active_returns), Rb = index_returns$SPY, scale = 252, Rf = 0.025/252, digits = 4)
+
+table.DownsideRisk(R = cbind(port_returns, active_returns), scale = 252, Rf = 0.025/252, MAR = 0.07/252, digits = 4)
+```
+
+The benchmark returns (Rb) in **`table.CAPM`** used SPY returns to give a comparison of the alpha and beta of the portfolios and actively-managed ETFs. Again, Portfolio 2 had the highest annualized return and Sharpe Ratio and the lowest maximum drawdown. The ARK ETFs would have outperformed Portfolio 2 if an investor bought at the start of 2015 and sold in early 2021 at its peak. 
+
+## 7 Final Remarks
+
+Some caveats about this experiment:
+
+1. I had assumed that the stocks in the S&P500 Index at the time of writing were also in the S&P500 Index in 2015.
+2. I had assumed that the 15 stocks sampled for each portfolio would not be swapped for other stocks within the experiment period. 
+
+I would like to stress that this project was mainly carried out as a fun/thought experiment. It was not meant to disprove the expertise of active managers, the strategies employed by these funds for stock selection or the power of investing into an index ETF. From the results of this simple experiment, only 1 portfolio out of 10 (Portfolio 2) managed to achieve greater cumulative returns over the years than the rest of the pack. There would be an incredible amount of luck involved (if it can be quantified) to select 15 stocks from the S&P500 universe of stocks that can provide such returns.
