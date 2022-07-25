@@ -56,7 +56,7 @@ prices <- cbind(quantmod::getSymbols(Symbols = "BRK-B", src = "yahoo", auto.assi
 colnames(prices)[1:2] <- c("BRK-B", "BF-B")
 
 # Check which stocks have NA over the specified period
-which(colSums(is.na(prices)) > 0)
+data.frame(rbind(which(colSums(is.na(prices)) > 0)), row.names = "Number of NAs")
 
 # Keep only stocks that do not have NAs over the specified period
 prices <- prices[, which(colSums(is.na(prices)) == 0)]
@@ -75,7 +75,7 @@ for (i in 1:10) {
 }
 
 # Check stocks sampled into each portfolio
-sapply(samp_stocks, colnames)
+data.frame(sapply(samp_stocks, colnames), row.names = 1:15)
 
 ## ----calculate returns for portfolios-----------------------------------------
 stock_returns <- lapply(samp_stocks, function(x) {
@@ -84,11 +84,11 @@ stock_returns <- lapply(samp_stocks, function(x) {
 
 names(stock_returns) <- paste("S", c(seq(1:10)), "_returns", sep = "")
 
-sapply(stock_returns, dim)
+data.frame(sapply(stock_returns, dim), row.names = c("Number of rows", "Number of columns"))
 
-# Show first 3 elements in stock_returns, first 5 columns of data
-lapply(stock_returns[1:3], function(x) {
-  head(x[, 1:5], n = 4)
+# Show first 3 elements in stock_returns, first 5 columns and first 4 rows of data
+lapply(stock_returns[1:2], function(x) {
+  head(x[,1:5], n = 4)
 })
 
 ## ----create mean-variance portfolio specification-----------------------------
@@ -153,9 +153,9 @@ port_weights <- lapply(optports, FUN = PortfolioAnalytics::extractWeights)
 
 names(port_weights) <- paste("P", c(seq(1:10)), "_weights", sep = "")
 
-# Show first 3 elements in stock_returns, first 5 columns of data
+# Show first 3 elements in stock_returns, first 5 columns and first 4 rows of data each
 lapply(port_weights[1:3], function(x) {
-  head(x[, 1:5], n = 4)
+  head(x[,1:5], n = 4)
 })
 
 ## ----calculate daily portfolio returns----------------------------------------
@@ -170,7 +170,7 @@ for (r in 1:10) {
   names(port_returns)[r] <- paste("P", r, "_returns", sep = "")
 }
 
-head(port_returns)
+data.frame(head(port_returns))
 
 ## ----obtain adjusted closing prices of benchmarks-----------------------------
 index_tickers <- c("SPY", "VTI", "QQQ", "IWM", "IJR", "IJH")
@@ -200,11 +200,11 @@ colnames(active_prices) <- active_tickers
 ## ----calculate benchmark daily returns----------------------------------------
 index_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = index_prices, method = "discrete"))
 
-head(index_returns, 4)
+data.frame(head(index_returns, 4))
 
 active_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = active_prices, method = "discrete"))
 
-head(active_returns, 4)
+data.frame(head(active_returns, 4))
 
 ## ----plot cum returns against index ETFs, message=FALSE, warning=FALSE--------
 PerformanceAnalytics::chart.CumReturns(R = cbind(port_returns[,1:5], index_returns), 

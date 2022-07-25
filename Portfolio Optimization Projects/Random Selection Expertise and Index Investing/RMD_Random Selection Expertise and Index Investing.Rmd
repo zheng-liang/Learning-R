@@ -96,7 +96,7 @@ prices <- cbind(quantmod::getSymbols(Symbols = "BRK-B", src = "yahoo", auto.assi
 colnames(prices)[1:2] <- c("BRK-B", "BF-B")
 
 # Check which stocks have NA over the specified period
-which(colSums(is.na(prices)) > 0)
+data.frame(rbind(which(colSums(is.na(prices)) > 0)), row.names = "Number of NAs")
 
 # Keep only stocks that do not have NAs over the specified period
 prices <- prices[, which(colSums(is.na(prices)) == 0)]
@@ -120,7 +120,7 @@ for (i in 1:10) {
 }
 
 # Check stocks sampled into each portfolio
-sapply(samp_stocks, colnames)
+data.frame(sapply(samp_stocks, colnames), row.names = 1:15)
 ```
 
 ## 4 Calculate Daily Stock Returns and Optimize Portfolios {.tabset .tabset-pills}
@@ -136,11 +136,11 @@ stock_returns <- lapply(samp_stocks, function(x) {
 
 names(stock_returns) <- paste("S", c(seq(1:10)), "_returns", sep = "")
 
-sapply(stock_returns, dim)
+data.frame(sapply(stock_returns, dim), row.names = c("Number of rows", "Number of columns"))
 
-# Show first 3 elements in stock_returns, first 5 columns of data
-lapply(stock_returns[1:3], function(x) {
-  head(x[, 1:5], n = 4)
+# Show first 3 elements in stock_returns, first 5 columns and first 4 rows of data
+lapply(stock_returns[1:2], function(x) {
+  head(x[,1:5], n = 4)
 })
 ```
 
@@ -229,9 +229,9 @@ port_weights <- lapply(optports, FUN = PortfolioAnalytics::extractWeights)
 
 names(port_weights) <- paste("P", c(seq(1:10)), "_weights", sep = "")
 
-# Show first 3 elements in stock_returns, first 5 columns of data
+# Show first 3 elements in stock_returns, first 5 columns and first 4 rows of data each
 lapply(port_weights[1:3], function(x) {
-  head(x[, 1:5], n = 4)
+  head(x[,1:5], n = 4)
 })
 ```
 
@@ -251,7 +251,7 @@ for (r in 1:10) {
   names(port_returns)[r] <- paste("P", r, "_returns", sep = "")
 }
 
-head(port_returns)
+data.frame(head(port_returns))
 ```
 
 ## 6 Evaluate Performance Against Benchmarks {.tabset .tabset-pills}
@@ -312,11 +312,11 @@ The discrete method was also applied to the calculation of benchmark returns for
 ```{r calculate benchmark daily returns}
 index_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = index_prices, method = "discrete"))
 
-head(index_returns, 4)
+data.frame(head(index_returns, 4))
 
 active_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = active_prices, method = "discrete"))
 
-head(active_returns, 4)
+data.frame(head(active_returns, 4))
 ```
 
 ### 6.3 Comparison Against Index Investing {.tabset}
@@ -337,7 +337,7 @@ PerformanceAnalytics::chart.CumReturns(R = cbind(port_returns[,6:10], index_retu
                                        plot.engine = "plotly")
 ```
 
-From the two charts, the `QQQ` ETF that tracks the NASDAQ-100 Index, which has a heavy focus on the technology sector, had higher cumulative returns than the other Index ETFs. The only portfolio that managed to outperform the`QQQ` ETF is Portfolio 2, which is made up of `r sp500[sp500$symbol %in% names(samp_stocks$S2_prices),]`.
+From the two charts, the `QQQ` ETF that tracks the NASDAQ-100 Index, which has a heavy focus on the technology sector, had higher cumulative returns than the other Index ETFs. The only portfolio that managed to outperform the `QQQ` ETF is Portfolio 2, which is made up of `r sp500[sp500$symbol %in% names(samp_stocks$S2_prices),]`
 
 #### 6.3.2 Drawdowns
 
