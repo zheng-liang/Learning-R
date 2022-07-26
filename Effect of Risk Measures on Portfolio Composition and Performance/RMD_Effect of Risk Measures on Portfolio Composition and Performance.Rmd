@@ -9,13 +9,15 @@ output:
     code_folding: show
     highlight: tango
     theme: flatly
-    fig_width: 6
-    fig_height: 4
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 ```
+
+Updated on: `r Sys.Date()`
 
 ## 1 Introduction
 
@@ -23,7 +25,7 @@ The purpose of this project is to determine the effect of different risk measure
 
 The first part introduces the different risk measures using a single security. The second part shows how the different risk measures are used to optimize a portfolio with more than one security for a single-period. I first created a category of portfolios that minimizes the different risk measures, then created a category of optimal portfolios that minimizes the different risk measures for a given level of return. In each category of portfolios, I compared their performance and charted their cumulative returns.
 
-The results in this project should not be taken as investment advice, and is not intended to be investment advice.
+The results in this project should not be taken as investment advice.
 
 ## 2 Packages Required
 
@@ -35,7 +37,7 @@ library(PortfolioAnalytics) # For portfolio optimization and analysis
 library(quantmod) # For obtaining historical prices from Yahoo Finance
 ```
 
-## 3 Understanding Risk Measures
+## 3 Understanding Risk Measures {.tabset .tabset-pills}
 
 In this section, the different risk measures are introduced, starting with Variance/Standard Deviation as it is the fundamental risk measure of the Mean-Variance Framework developed by Harry Markowitz. Subsequently, I described the Semi-Variance/Semi-Deviation and Downside Deviation that measures only the downside risk or the negative fluctuations, followed by VaR and CVaR which measures the tail risk. The **`PerformanceAnalytics`** package provides the necessary functions for the different risk measures.
 
@@ -249,7 +251,7 @@ In this section, we start applying the different risk measures into the portfoli
 * Costco Wholesale Corporation (COST)
 * NVIDIA Corporation (NVDA)
 
-I have retrieved the historical price data of each ETF, keeping only the adjusted price column. I have used the same start and end date for data retrieval as Section 3, but chose a monthly periodicity.
+I have retrieved the historical price data of each ETF, keeping only the adjusted price column. I have used the same start and end date for data retrieval as Section 3.
 
 ```{r portfolio price data}
 tickers <- c("AAPL", "MSFT", "JNJ", "PG", "MA", "HD", "PFE", "MRK", "COST", "NVDA")
@@ -286,7 +288,7 @@ head(returns); nrow(returns)
 
 With the `returns` data, we can proceed with optimizing the portfolios based on different risk measures. I created portfolios that minimizes the different risk measures in Section 5 and optimal portfolios that minimizes risk for a given level of return in Section 6.
 
-## 5 Minimum Risk Portfolios
+## 5 Minimum Risk Portfolios {.tabset .tabset-pills}
 
 In this section, I would start by creating the minimum variance portfolio, followed by portfolios with minimum semi-variance, downside deviation, VaR and CVaR. The creation of these portfolios require the package **`PortfolioAnalytics`**. 
 
@@ -427,7 +429,9 @@ weight_MinHCVaR <- randport[which.max(hcvar_search),]
 weight_MinHCVaR
 ``` 
 
-### 5.6 Summary of Minimum Risk Portfolios
+### 5.6 Summary of Minimum Risk Portfolios {.tabset}
+
+#### 5.6.1 Merge Minimum Risk Portfolios
 
 Now that we have created the different portfolios by minimizing different risk measures, we can compare the weights of their components, their performance and chart their cumulative returns.
 
@@ -454,7 +458,9 @@ return_comp <- cbind(output1[, which.min(stddev_search)],
 head(return_comp)
 ```
 
-An appropriate benchmark would be needed if we wish to properly compare the performance of our portfolios. I am using the SPDR S&P 500 ETF, which tracks U.S. Large-Cap stocks in the S&P 500 Index.
+#### 5.6.2 Benchmark
+
+An appropriate benchmark would be needed if we wish to properly compare the performance of our portfolios. I am using the SPDR S&P 500 ETF, which tracks the S&P 500 Large-Cap Index.
 
 ```{r benchmark return}
 benchmark <- quantmod::getSymbols(Symbols = "SPY",
@@ -469,21 +475,25 @@ benchmark_return <- na.omit(PerformanceAnalytics::Return.calculate(prices = benc
 head(benchmark_return); dim(benchmark_return)
 ```
 
+#### 5.6.3 Plot Cumulative Return
+
 After compiling the returns, we can plot their cumulative returns using **`chart.CumReturns`** and compare their drawdowns by using 
 
 ```{r plot performance chart of minimum risk portfolios, fig.align='center'}
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
-                                       legend.loc = "topleft",
-                                       main = "Cumulative Returns of Minimum Risk Portfolios")
+                                       main = "Cumulative Returns of Minimum Risk Portfolios", 
+                                       plot.engine = "plotly")
 
 PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
                                      geometric = T,
-                                     legend.loc = "bottom",
-                                     main = "Drawdown of Minimum Risk Portfolios")
+                                     main = "Drawdown of Minimum Risk Portfolios", 
+                                     plot.engine = "plotly")
 ```
 
 The minimum risk portfolios all had better cumulative returns than the SPY benchmark. In descending order of cumulative returns based on the chart, `Min_HCVaR` > `Min_DownDev` > `Min_HVaR` > `Min_SemiDev` > `Min_Var` portfolios. In general, the SPY benchmark has larger drawdowns than the minimum risk portfolios.
+
+#### 5.6.4 Performance Metrics and Statistics
 
 ```{r stats and annualized metrics of minimum risk portfolios}
 table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
@@ -495,7 +505,7 @@ table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 12, Rf = 0.02/12, di
 table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, MAR = 0.03/12, digits = 4)
 ```
 
-## 6 Optimal Portfolio Selection With Target Return
+## 6 Optimal Portfolio Selection With Target Return {.tabset .tabset-pills}
 
 In this section, I optimized portfolios based on a target return of 20% annually. Since we have generated random portfolios in Section 5, I used that to determine the subset of portfolios that meets the target return requirement. The reason for doing this is because random portfolios generated using **`random_portfolios`** function does not account for the return constraint.
 
@@ -587,7 +597,9 @@ weight_MeanCVaR <- sub_randport[which.max(meanCVaR_search),]
 weight_MeanCVaR
 ```
 
-### 6.6 Summary of Mean-Risk Portfolios
+### 6.6 Summary of Mean-Risk Portfolios {.tabset}
+
+#### 6.6.1 Merge Mean-Risk Portfolios
 
 With the different optimal portfolios created, we can now compare their weights, performance and chart their cumulative returns.
 
@@ -613,22 +625,26 @@ return_comp <- cbind(subrp_return[, which.min(meanvar_search)],
                      subrp_return[, which.max(meanCVaR_search)]) %>%
   `colnames<-`(c("Mean_Var", "Mean_SemiDev", "Mean_DownDev", "Mean_VaR", "Mean_CVaR"))
 
-dim(return_comp)
+head(return_comp)
 ```
+
+#### 6.6.2 Plot Cumulative Return
 
 ```{r plot performance chart of optimal portfolios, fig.align='center'}
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
-                                       legend.loc = "topleft",
-                                       main = "Cumulative Returns of Optimal Portfolios")
+                                       main = "Cumulative Returns of Optimal Portfolios", 
+                                       plot.engine = "plotly")
 
 PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
                                      geometric = T,
-                                     legend.loc = "bottom",
-                                     main = "Drawdown of Optimal Portfolios")
+                                     main = "Drawdown of Optimal Portfolios",
+                                     plot.engine = "plotly")
 ```
 
 With an additional constraint of having 20% target return, the optimal portfolios have similar cumulative returns (since we added a target return). The SPY benchmark still has larger drawdowns compared to the optimal portfolios in general.
+
+#### 6.6.3 Performance Metrics and Statistics
 
 Below are the common statistics and performance metrics that can be compared to the SPY benchmark.
 

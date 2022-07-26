@@ -1,4 +1,5 @@
 ## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(fig.align="center")
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 ## ----load packages, message=FALSE, warning=FALSE------------------------------
@@ -258,13 +259,13 @@ head(benchmark_return); dim(benchmark_return)
 ## ----plot performance chart of minimum risk portfolios, fig.align='center'----
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
-                                       legend.loc = "topleft",
-                                       main = "Cumulative Returns of Minimum Risk Portfolios")
+                                       main = "Cumulative Returns of Minimum Risk Portfolios", 
+                                       plot.engine = "plotly")
 
 PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
                                      geometric = T,
-                                     legend.loc = "bottom",
-                                     main = "Drawdown of Minimum Risk Portfolios")
+                                     main = "Drawdown of Minimum Risk Portfolios", 
+                                     plot.engine = "plotly")
 
 ## ----stats and annualized metrics of minimum risk portfolios------------------
 table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
@@ -349,18 +350,18 @@ return_comp <- cbind(subrp_return[, which.min(meanvar_search)],
                      subrp_return[, which.max(meanCVaR_search)]) %>%
   `colnames<-`(c("Mean_Var", "Mean_SemiDev", "Mean_DownDev", "Mean_VaR", "Mean_CVaR"))
 
-dim(return_comp)
+head(return_comp)
 
 ## ----plot performance chart of optimal portfolios, fig.align='center'---------
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
-                                       legend.loc = "topleft",
-                                       main = "Cumulative Returns of Optimal Portfolios")
+                                       main = "Cumulative Returns of Optimal Portfolios", 
+                                       plot.engine = "plotly")
 
 PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return), 
                                      geometric = T,
-                                     legend.loc = "bottom",
-                                     main = "Drawdown of Optimal Portfolios")
+                                     main = "Drawdown of Optimal Portfolios",
+                                     plot.engine = "plotly")
 
 ## ----stats and annualized metrics of optimal portfolios-----------------------
 table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
