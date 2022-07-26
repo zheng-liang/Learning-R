@@ -1,4 +1,5 @@
 ## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(fig.align="center")
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 ## ----load packages, message=FALSE, warning=FALSE------------------------------
@@ -33,7 +34,7 @@ nrow(AAPL_price)
 # Check for missing data
 colSums(is.na(AAPL_price))
 
-## ----calculate log returns, fig.align='center'--------------------------------
+## ----calculate log returns----------------------------------------------------
 # Calculate log/continuous returns using Adjusted column (column 6)
 
 # Remove first row of calculated returns since returns cannot be calculated for first observation
@@ -47,7 +48,7 @@ nrow(rAAPL)
 # Chart weekly log-returns over time
 plot.zoo(rAAPL, main = "Weekly Log-Returns of AAPL", xlab = "Time", ylab = "Log-Return (in %)")
 
-## ----rolling volatility of AAPL returns, fig.align='center'-------------------
+## ----rolling volatility of AAPL returns---------------------------------------
 # Plot rolling volatility of AAPL returns
 
 # width = 4 to approximately calculate annualized sd using a monthly rolling-window
@@ -62,7 +63,7 @@ rAAPL %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
 
 rAAPL %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
 
-## ----distribution of AAPL returns, fig.align='center'-------------------------
+## ----distribution of AAPL returns---------------------------------------------
 # Plot distribution of AAPL's weekly log returns
 
 PerformanceAnalytics::chart.Histogram(R = rAAPL,
