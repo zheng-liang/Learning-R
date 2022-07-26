@@ -1,4 +1,5 @@
 ## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(fig.align="center")
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 ## ----Load packages, message=FALSE---------------------------------------------
@@ -23,7 +24,7 @@ head(AMZN, n = 4); tail(AMZN, n = 4)
 
 colSums(is.na(AMZN))
 
-## ----Discrete return and cumulative return plot, fig.align = 'center'---------
+## ----Discrete return and cumulative return plot-------------------------------
 AMZN.Adj <- AMZN[,6]
 
 # na.omit() removes the first row, which is an NA value as there are no prior data to calculate returns
@@ -80,7 +81,7 @@ r_withRebal <- Return.portfolio(returns,
 
 colnames(r_withRebal$returns) <- "Rp_withRebal"
 
-## ----End of period weights, fig.align = 'center'------------------------------
+## ----End of period weights----------------------------------------------------
 eop_weight_noRebal <- r_noRebal$EOP.Weight
 
 eop_weight_wRebal <- r_withRebal$EOP.Weight
@@ -98,14 +99,14 @@ eop_weight_wRebal <- r_withRebal$EOP.Weight
   
   abline(h = 1/length(colnames(eop_weight_wRebal)), col = "red", lwd = 2)
 
-## ----Performance chart, fig.align = 'center', fig.height=7--------------------
+## ----Performance chart--------------------------------------------------------
 ret_comp <- cbind(r_noRebal$returns, r_withRebal$returns)
 
 charts.PerformanceSummary(R = ret_comp,
                           main = "Comparison of Cumulative Returns",
                           legend.loc = "topleft")
 
-## ----Weights over time without rebalancing, fig.align = 'center', fig.width=6, fig.height=4.5----
+## ----Weights over time without rebalancing------------------------------------
 par(mfrow = c(1,1), mar = c(2, 2, 2, 2))
 
 plot.zoo(eop_weight_noRebal,
@@ -196,7 +197,7 @@ port_MR <- optimize.portfolio(returns,
 
 port_MR
 
-## ----Extract weights, fig.align = 'center'------------------------------------
+## ----Extract weights----------------------------------------------------------
 weight_MV <- extractWeights(port_MV)
 
 weight_MR <- extractWeights(port_MR)
@@ -223,7 +224,7 @@ rp_MR <- Return.portfolio(returns,
                           geometric = T) %>%
   `colnames<-`("Portfolio MR")
 
-## ----Chart of performance, fig.align = 'center', fig.height=7-----------------
+## ----Chart of performance-----------------------------------------------------
 comparison <- cbind(rp_MV, rp_MR, benchmarkReturn)
 
 charts.PerformanceSummary(comparison,
@@ -278,7 +279,7 @@ port_MeanVar_qRebal <- optimize.portfolio.rebalancing(returns,
                                                       training_period = 504,
                                                       rolling_window = 45)
 
-## ----Weights, fig.align = 'center'--------------------------------------------
+## ----Weights------------------------------------------------------------------
 chart.Weights(port_MeanVar_qRebal)
 
 ## ----MeanVar Portfolio Returns, warning=FALSE---------------------------------
@@ -288,7 +289,7 @@ rp_MeanVar <- Return.portfolio(returns,
                                weights = w_qOptim, 
                                geometric = T)
 
-## ----Comparison of performance, fig.align = 'center', fig.height=7------------
+## ----Comparison of performance------------------------------------------------
 evaluation <- cbind(rp_MeanVar,benchmarkReturn)
 
 charts.PerformanceSummary(evaluation, Rf=0.03/252, main = "Performance of Mean-Variance Portfolio")
