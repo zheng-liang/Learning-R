@@ -17,9 +17,9 @@ knitr::opts_chunk$set(fig.align="center")
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 ```
 
-## 1 Introduction
-
 Updated on: `r Sys.Date()`
+
+## 1 Introduction
 
 Through this project, my intention is to apply what I have learnt in R onto one of the areas that I always had an interest in, which is stock portfolio optimization. It documents the commonly used packages and functions in R that are useful for portfolio analysis and possibly even for back-testing. It is not intended to be a detailed or advanced guide to portfolio theory and R application.
 
