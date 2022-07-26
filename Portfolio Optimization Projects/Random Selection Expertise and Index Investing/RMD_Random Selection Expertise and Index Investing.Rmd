@@ -23,8 +23,6 @@ The aim of this project is to find out if portfolios made of 15 randomly selecte
 
 The project is meant to be a fun/thought experiment, and is not meant to disprove of index or active investing. It does not make use of any statistical methods to prove that random selection, expertise or index investing is a better choice.
 
-Under each main section heading, there are tabs that can be used to navigate to sub-sections.
-
 ## 2 Packages Required
 
 ```{r load packages, message=FALSE, warning=FALSE}
