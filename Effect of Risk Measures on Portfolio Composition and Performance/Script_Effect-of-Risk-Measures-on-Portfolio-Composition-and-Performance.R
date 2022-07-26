@@ -256,7 +256,7 @@ benchmark_return <- na.omit(PerformanceAnalytics::Return.calculate(prices = benc
 
 head(benchmark_return); dim(benchmark_return)
 
-## ----plot performance chart of minimum risk portfolios, fig.align='center'----
+## ----plot performance chart of minimum risk portfolios, message=FALSE, warning=FALSE----
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
                                        main = "Cumulative Returns of Minimum Risk Portfolios", 
@@ -352,7 +352,7 @@ return_comp <- cbind(subrp_return[, which.min(meanvar_search)],
 
 head(return_comp)
 
-## ----plot performance chart of optimal portfolios, fig.align='center'---------
+## ----plot performance chart of optimal portfolios, message=FALSE, warning=FALSE----
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
                                        main = "Cumulative Returns of Optimal Portfolios", 

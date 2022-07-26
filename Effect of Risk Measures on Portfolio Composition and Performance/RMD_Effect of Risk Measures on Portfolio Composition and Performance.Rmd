@@ -479,7 +479,7 @@ head(benchmark_return); dim(benchmark_return)
 
 After compiling the returns, we can plot their cumulative returns using **`chart.CumReturns`** and compare their drawdowns by using 
 
-```{r plot performance chart of minimum risk portfolios, fig.align='center'}
+```{r plot performance chart of minimum risk portfolios, message=FALSE, warning=FALSE}
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
                                        main = "Cumulative Returns of Minimum Risk Portfolios", 
@@ -630,7 +630,7 @@ head(return_comp)
 
 #### 6.6.2 Plot Cumulative Return
 
-```{r plot performance chart of optimal portfolios, fig.align='center'}
+```{r plot performance chart of optimal portfolios, message=FALSE, warning=FALSE}
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
                                        geometric = T, # Use geometric chaining for portfolio cumulative returns over time
                                        main = "Cumulative Returns of Optimal Portfolios", 
