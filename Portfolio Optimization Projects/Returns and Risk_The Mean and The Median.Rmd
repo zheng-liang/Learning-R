@@ -1,0 +1,204 @@
+---
+title: 'Returns and Risk: The Mean and The Median'
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show 
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE)
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+In this project, my intention is to find out if using median returns in portfolio optimization could lead to better portfolio performance compared to mean returns. The use of mean returns might not accurately describe expected returns due to the non-normal distribution of financial returns. The mean is also known to be affected by outliers, whereas the median tend to be a more robust measure of central tendency. 
+
+(To be completed last)
+
+## 2 Packages Required
+
+```{r load packages}
+library(doParallel) # For parallel computation in foreach loops
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(tidyquant) # For quantmod and PerformanceAnalytics functions
+library(tidyverse) # For dplyr and ggplot2 functions (data manipulation and plotting)
+```
+
+## 3 Retrieve Stock Prices and Calculate Returns {.tabset .tabset-pills}
+
+I would sample 10 stocks randomly from the top 100 companies in the S&P500 Index by weight and retrieve their daily adjusted closing prices from Yahoo Finance, starting January 2015 to June 2022. The daily stock returns are calculated using the discrete/simple method as it is used in calculating portfolio returns.
+
+### 3.1 Index Components
+
+The S&P500 Index components can be obtained using **`tidyquant::tq_index()`**.
+
+```{r retrieve S&P500 index components}
+# tq_index obtains data of S&P500 components from www.ssga.com 
+
+sp500 <- tidyquant::tq_index(x = "SP500")[1:100, c(1,2,5,6)]
+
+sp500
+
+tickers <- sp500$symbol
+```
+
+### 3.2 Stock Prices of Components
+
+The daily adjusted closing prices of the tickers from Yahoo Finance can be retrieved using **`quantmod::getSymbols()`**. From my previous project ([Random Selection, Expertise and Index Investing](https://tinyurl.com/2p8csyhj)), the ticker `BRK.B` is different from those used by Yahoo Finance. I corrected it before obtaining the stock prices.
+
+```{r retrieve price data}
+# Correct the tickers for BRK.B
+tickers <- replace(x = tickers, list = tickers %in% c("BRK.B"), values = c("BRK-B"))
+
+startdate <- as.Date("2015-01-01")
+enddate <- as.Date("2022-07-01")
+
+prices <- NULL
+
+# Loop to get adjusted closing prices for all stocks
+for (t in tickers) {   # Use for loop to get prices of all tickers
+   
+   tmp <- NULL
+  
+   tmp <- try(   # Use try function to skip loop and return error message when price cannot be retrieved
+       expr = {Ad(quantmod::getSymbols(Symbols = t, src = "yahoo", auto.assign = FALSE, 
+                                       from = startdate, to = enddate, periodicity = "daily"))},
+       silent = TRUE
+   )
+   
+   if(inherits(tmp, "try-error")) {cat("ERROR:", t, sep = " "); next}
+   
+   names(tmp) <- t
+   
+   prices <- cbind(prices, tmp)
+}
+
+# Check dimension of object, start and end date of data collected
+dim(prices); start(prices); end(prices)
+```
+
+I only want stocks that have data for the period January 2015 to June 2022, and those that have missing values during this period would not be considered.
+
+```{r remove stocks with missing values}
+# Check which stocks have NA over the specified period
+data.frame(rbind(which(colSums(is.na(prices)) > 0)), row.names = "Number of NAs")
+
+# Keep only stocks that do not have NAs over the specified period
+prices <- prices[, which(colSums(is.na(prices)) == 0)]
+
+dim(prices) # Left with 99 stocks
+```
+
+### 3.3 Stock Returns for Portfolio
+
+I would first sample the 10 stocks for the portfolio from `prices`, and this process is replicable using the **`set.seed()`**, unless changes have been made to the S&P500 Index components.
+
+```{r sample 25 stocks from prices}
+set.seed(42564)
+
+samp_stocks <- prices[, sample(x = ncol(prices), size = 10, replace = FALSE)]
+
+# Stocks sampled into portfolio
+sp500[which(sp500$symbol %in% names(samp_stocks)),]
+```
+
+Discrete returns can be calculated using **`PerformanceAnalytics::Return.calculate()`**.
+
+```{r calculate discrete returns}
+stock_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = samp_stocks, method = "discrete"))
+
+dim(stock_returns); data.frame(head(stock_returns))
+```
+
+## 4 Measuring Spread of Data {.tabset .tabset-pills}
+
+### 4.1 Mean and Median
+
+The mean and median are two measures of central tendency that can be used to describe expected returns of a stock, based on historical returns. Since the distribution of stock returns tend to be non-normal, the median may be a more appropriate measure. For example, the density plot of `BKNG` (Booking Holdings Inc.) showed a higher peak with fatter and longer tails than a normal distribution. The Q-Q plot on the top-right corner also indicated that the return distribution is non-normal.
+
+```{r plot historical returns of BKNG}
+chart.Histogram(R = stock_returns$BKNG, method = c("add.density", "add.normal", "add.qqplot"), main = "Density Plot of BKNG Historical Returns")
+
+legend(x = "topright", legend = c("Density Plot", "Normal Distribution"), lwd = 2, col = c("darkblue", "blue"))
+```
+
+The mean and median returns of each stock in the portfolio are:
+
+```{r mean and median of stocks in stock_returns}
+stock_means <- apply(X = stock_returns, MARGIN = 2, FUN = mean)
+
+stock_medians <- apply(X = stock_returns, MARGIN = 2, FUN = median)
+
+rbind(Mean = stock_means, Median = stock_medians)
+```
+
+Since we have daily returns, the mean and median values are small, but we can see that there is a difference. The mean returns of individual stocks are usually used to calculate portfolio returns because they can be easily added across assets, and the mean portfolio return is simply the weighted mean return of its components.
+
+$E(R_p) = \sum_{i=1}^N E(R_i)w_i$, where $E(R_i)$ is the individual mean return and $w_i$ is the weight of the component.
+
+Finding median portfolio returns, $med(R_p)$, using median stock returns is more complex. It is the middle value (50th percentile) of individual stock median returns sorted in ascending order and $med(R_p)$ is where $\sum_{i=1}^{K-1} w_i \le 0.5 \text{ and } \sum_{i=K+1}^N w_i \le 0.5$
+
+### 4.2 Variance (or Standard Deviation)
+
+The variance measures the squared deviation of returns from the mean, but standard deviation is used since it is in the same units as returns. 
+
+The standard deviation of each stock in the portfolio is:
+
+```{r standard deviation of stocks in stock_returns}
+stock_sd <- apply(X = stock_returns, MARGIN = 2, FUN = sd)
+
+stock_sd
+```
+
+If returns were normally distributed, we can use the 68-95-99 rule, where 68%/95%/99% of returns are within 1SD/2SD/3SD of the mean.
+
+### 4.3 Mean Absolute Deviation
+
+The mean absolute deviation (MAD) is the average of the absolute deviations between returns and the central point, which can be the mean or median of the returns. MAD usually uses the mean as the central point.
+
+$MAD = \frac{1}{n}\sum_{n=1}^N |R_{i,n} - m(R_n)|$, where $R_{i,n}$ is the observation $n$ of an individual stock, and $m(R_i)$ is the mean or median of an individual stock.
+
+The MAD around the mean and median of each stock in the portfolio are:
+
+```{r MAD around mean and median}
+stock_MAD <- apply(X = stock_returns, MARGIN = 2, FUN = function(x) {
+  mean(abs(x - mean(x)))
+})
+
+stock_MADmed <- apply(X = stock_returns, MARGIN = 2, FUN = function(x) {
+  mean(abs(x - median(x)))
+})
+
+stock_MAD; stock_MADmed
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+## References 
+
+https://en.wikipedia.org/wiki/Weighted_median
+
+https://en.wikipedia.org/wiki/Median_absolute_deviation
+
+https://en.wikipedia.org/wiki/Average_absolute_deviation
+
+https://statisticsbyjim.com/basics/mean-absolute-deviation/
+
