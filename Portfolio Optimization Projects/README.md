@@ -14,7 +14,26 @@ portfolio method.
 
 Click the link to access the rendered HTML file: https://tinyurl.com/3cdmwfv4
 
-### 2 Random Selection, Expertise and Index Investing
+### 2 Effects of Risk Measures on Portfolio Composition and Performance
+
+In this project, I attempted to determine the effects of the different risk measures on portfolio optimization and performance. The following risk measures have been used:  
+
+- Variance and Standard Deviation
+- Semi-Variance and Semi-Deviation
+- Downside Deviation
+- Value-at-Risk
+- Conditional Value-at-Risk (or Expected Shortfall, Expected Tail Loss)
+
+In the first part, I introduced the different measures on a single security and show how they differ. In the second part, I generated random portfolios and optimized two sets of portfolios:  
+
+- Portfolios that minimize the different risk measures
+- Portfolios that minimize the different risk measures for a given level of return
+
+The portfolio was created using 10 large-cap U.S. equities, and benchmarked against the SPDR S&P 500 ETF (SPY).  
+
+Click the link to access the rendered HTML file: https://tinyurl.com/mrvee6zu  
+
+### 3 Random Selection, Expertise and Index Investing
 
 The aim of this project is to find out if portfolios made of 15 randomly selected stocks from the S&P500 Large-Cap Index 
 can outperform stock-picking experts and index investing. The portfolios were optimized based on the mean-variance framework 
