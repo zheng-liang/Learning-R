@@ -99,18 +99,18 @@ eop_weight_wRebal <- r_withRebal$EOP.Weight
   
   abline(h = 1/length(colnames(eop_weight_wRebal)), col = "red", lwd = 2)
 
+## ----Weights over time without rebalancing------------------------------------
+par(mfrow = c(1,1), mar = c(2, 2, 2, 2))
+
+plot.zoo(eop_weight_noRebal,
+         main = "End-of-Period Weights Over Time Without Rebalancing")
+
 ## ----Performance chart--------------------------------------------------------
 ret_comp <- cbind(r_noRebal$returns, r_withRebal$returns)
 
 charts.PerformanceSummary(R = ret_comp,
                           main = "Comparison of Cumulative Returns",
                           legend.loc = "topleft")
-
-## ----Weights over time without rebalancing------------------------------------
-par(mfrow = c(1,1), mar = c(2, 2, 2, 2))
-
-plot.zoo(eop_weight_noRebal,
-         main = "End-of-Period Weights Over Time Without Rebalancing")
 
 ## ----Stats of portfolios------------------------------------------------------
 table.Stats(ret_comp)
@@ -155,7 +155,7 @@ portspec1 <- add.constraint(portspec1,
 # Weight constraint on each stock, max is 35% of portfolio
 portspec1 <- add.constraint(portspec1, 
                             type="box",
-                            min=0, max=0.35)
+                            min = 0, max = 0.35)
 
 # Objective to minimize risk based on variance (function will default to standard deviation as measure of risk)
 portspec1 <- add.objective(portspec1,
@@ -242,11 +242,11 @@ portspec3 <- portfolio.spec(colnames(returns))
 # Slight change in weight_sum to reduce restrictiveness while optimizing
 portspec3 <- add.constraint(portspec3, 
                             type = "weight_sum",
-                            min_sum= 0.99, max_sum = 1.01)
+                            min_sum = 0.99, max_sum = 1.01)
 
 portspec3 <- add.constraint(portspec3, 
                             type="box", 
-                            min=0, max=0.4)
+                            min = 0, max = 0.4)
 
 # Add a constraint to have a target return
 portspec3 <- add.constraint(portspec3,
@@ -275,6 +275,7 @@ port_MeanVar_qRebal <- optimize.portfolio.rebalancing(returns,
                                                       optimize_method = "random",
                                                       rebalance_on = "quarters",
                                                       rp = randport,
+                                                      maxSR = T, # maximize Sharpe Ratio
                                                       search_size = 5000,
                                                       training_period = 504,
                                                       rolling_window = 45)

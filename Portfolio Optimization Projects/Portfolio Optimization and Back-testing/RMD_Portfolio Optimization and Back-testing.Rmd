@@ -158,7 +158,9 @@ r_withRebal <- Return.portfolio(returns,
 colnames(r_withRebal$returns) <- "Rp_withRebal"
 ```
 
-Indicating **`verbose = T`** allows us to extract more details about the underlying portfolio return calculation, such as the weights at the beginning and end of periods. We take a look at how the end-of-period weight for `JNJ` changes when the portfolio is re-balanced versus when it is not re-balanced. We can also use the **`charts.PerformanceSummary`** function to compare the cumulative return of the portfolios with re-balancing and without re-balancing.
+### 4.3 Compare Portfolios With and Without Re-balancing
+
+Indicating **`verbose = T`** in **`Return.portfolio`** allows us to extract more details about the underlying portfolio return calculation, such as the weights at the beginning and end of periods. We take a look at how the end-of-period weight for `JNJ` changes when the portfolio is re-balanced versus when it is not re-balanced. 
 
 ```{r End of period weights}
 eop_weight_noRebal <- r_noRebal$EOP.Weight
@@ -179,15 +181,7 @@ eop_weight_wRebal <- r_withRebal$EOP.Weight
   abline(h = 1/length(colnames(eop_weight_wRebal)), col = "red", lwd = 2)
 ```
 
-```{r Performance chart}
-ret_comp <- cbind(r_noRebal$returns, r_withRebal$returns)
-
-charts.PerformanceSummary(R = ret_comp,
-                          main = "Comparison of Cumulative Returns",
-                          legend.loc = "topleft")
-```
-
-For the weights, we can see the when we re-balance the portfolio quarterly, the end-of-period weights tend to fluctuate around the weight of approximately 17% (which is the weight in the equal weight portfolio). The weight without re-balancing showed a decreasing trend and we can uncover why this happened. Weight of `NVDA` had increased drastically over time as the stock's value grew faster in that span of time compared to other stocks
+When we re-balance the portfolio quarterly, the end-of-period weights tend to fluctuate around the weight of approximately 17% (which is the weight in an equal weight portfolio). In contrast, the weight without re-balancing showed a decreasing trend. We can find out why this happened by plotting the end-of period weights of all stocks in the portfolio. Weight of `NVDA` had increased drastically over time as the stock's value grew faster in that span of time compared to other stocks.
 
 ```{r Weights over time without rebalancing}
 par(mfrow = c(1,1), mar = c(2, 2, 2, 2))
@@ -196,13 +190,23 @@ plot.zoo(eop_weight_noRebal,
          main = "End-of-Period Weights Over Time Without Rebalancing")
 ```
 
+We can use the **`charts.PerformanceSummary`** function to compare the cumulative return of the portfolios with re-balancing and without re-balancing.
+
+```{r Performance chart}
+ret_comp <- cbind(r_noRebal$returns, r_withRebal$returns)
+
+charts.PerformanceSummary(R = ret_comp,
+                          main = "Comparison of Cumulative Returns",
+                          legend.loc = "topleft")
+```
+
 We can compare the statistics of this two portfolios using **`table.stats`** function. We can see that re-balancing reduced standard deviation but has also slightly reduced returns (values are based on daily returns).
 
 ```{r Stats of portfolios}
 table.Stats(ret_comp)
 ```
 
-### 4.3 Comparison With A Benchmark
+### 4.4 Comparison With A Benchmark
 
 We may also wish to compare our portfolios against a benchmark that is relevant to the portfolio we created. In this example, I have added large-cap U.S. stocks into my portfolio and so my benchmark would be the S&P500 index (ticker: SPY)
 
@@ -264,7 +268,7 @@ portspec1 <- add.constraint(portspec1,
 # Weight constraint on each stock, max is 35% of portfolio
 portspec1 <- add.constraint(portspec1, 
                             type="box",
-                            min=0, max=0.35)
+                            min = 0, max = 0.35)
 
 # Objective to minimize risk based on variance (function will default to standard deviation as measure of risk)
 portspec1 <- add.objective(portspec1,
@@ -318,7 +322,7 @@ port_MR
 
 ### 5.3 Comparing Portfolios and Performance Against Market Benchmark
 
-To compare the portfolios, we need to extract the optimal weights that had been calculated in the previous steps and calculate the portfolio returns. I have created a bar chart to show how the weights differ in each portfolio for illustration.
+To compare the portfolios, we need to extract the optimal weights that had been calculated in the previous steps and calculate the portfolio returns. I have created a bar chart to show how the optimal weights differ in each portfolio.
 
 ```{r Extract weights}
 weight_MV <- extractWeights(port_MV)
@@ -379,11 +383,11 @@ portspec3 <- portfolio.spec(colnames(returns))
 # Slight change in weight_sum to reduce restrictiveness while optimizing
 portspec3 <- add.constraint(portspec3, 
                             type = "weight_sum",
-                            min_sum= 0.99, max_sum = 1.01)
+                            min_sum = 0.99, max_sum = 1.01)
 
 portspec3 <- add.constraint(portspec3, 
                             type="box", 
-                            min=0, max=0.4)
+                            min = 0, max = 0.4)
 
 # Add a constraint to have a target return
 portspec3 <- add.constraint(portspec3,
@@ -417,6 +421,7 @@ port_MeanVar_qRebal <- optimize.portfolio.rebalancing(returns,
                                                       optimize_method = "random",
                                                       rebalance_on = "quarters",
                                                       rp = randport,
+                                                      maxSR = T, # maximize Sharpe Ratio
                                                       search_size = 5000,
                                                       training_period = 504,
                                                       rolling_window = 45)
