@@ -183,7 +183,7 @@ portspecs$P1_spec
 
 ### 4.3 Optimize Portfolios
 
-The portfolios are optimized with **`PortfolioAnalytics::optimize.portfolio.rebalancing()`**, which re-optimizes the portfolios every specified period. The main arguments are **`rebalance_on`**, **`training_period`** and **`rolling_window`**. We can decide the frequency of rebalancing (“months”, “quarters”, and “years”), the number of periods used for optimization (specify an integer matching frequency of data, in this case daily) and the number of periods to roll the window used for optimization. I also added the argument **`maxSR = TRUE`** to maximize the Sharpe Ratio of the portfolios (the demo can be found [here](https://rdrr.io/cran/PortfolioAnalytics/src/demo/demo_max_Sharpe.R)). The function **`PortfolioAnalytics::optimize.portfolio()`** allows for single-period optimization. 
+The portfolios are optimized with **`PortfolioAnalytics::optimize.portfolio.rebalancing()`**, which re-optimizes the portfolios every specified period. The main arguments are **`rebalance_on`**, **`training_period`** and **`rolling_window`**. We can decide the frequency of rebalancing (“months”, “quarters”, and “years”), the number of periods used for optimization (specify an integer matching frequency of data, in this case daily) and the number of periods to roll the window used for optimization. I also added the argument **`maxSR = TRUE`** to maximize the Sharpe Ratio of the portfolios (the demo can be found [here](https://rdrr.io/cran/PortfolioAnalytics/src/demo/demo_max_Sharpe.R)). The function **`PortfolioAnalytics::optimize.portfolio()`** only allows for single-period optimization.
 
 ```{r optimize portfolios, warning=FALSE}
 optports <- list()
@@ -422,6 +422,7 @@ The benchmark returns (Rb) in **`table.CAPM`** used SPY returns to give a compar
 Some caveats about this experiment:
 
 1. I had assumed that the stocks in the S&P500 Index at the time of writing were also in the S&P500 Index in 2015.
-2. I had assumed that the 15 stocks sampled for each portfolio would not be swapped for other stocks within the experiment period. 
+2. I had assumed that the 15 stocks sampled for each portfolio would not be swapped for other stocks within the experiment period.
+3. I had assumed zero transaction costs.
 
-I would like to stress that this project was mainly carried out as a fun/thought experiment. It was not meant to disprove the expertise of active managers, the strategies employed by these funds for stock selection or the power of investing into an index ETF. From the results of this simple experiment, only 1 portfolio out of 10 (Portfolio 2) managed to achieve greater cumulative returns over the years than the rest of the pack. There would be an incredible amount of luck involved (if it can be quantified) to select 15 stocks from the S&P500 universe of stocks that can provide such returns.
+I would like to stress that this project was mainly carried out as a fun/thought experiment. It was not meant to disprove the expertise of active managers, the strategies employed by these funds for stock selection or the power of investing into an index ETF. From the results of this simple experiment, only 1 portfolio out of 10 (Portfolio 2) managed to achieve greater cumulative returns over the years than the rest of the pack. There would be an incredible amount of luck involved (if it can be quantified) to select 15 stocks from the S&P500 universe of stocks that can provide such returns. if they were to be chosen at random.
