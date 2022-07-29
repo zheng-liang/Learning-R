@@ -1,7 +1,8 @@
 ## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE)
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 
-## ----load packages, message=FALSE, warning=FALSE, results="hide", class.source = "fold-show"----
+## ----load packages------------------------------------------------------------
 # Use install.packages("packagename") if they are not already installed
 
 # Packages that will be needed for obtaining data via an API
@@ -137,11 +138,6 @@ cpi_q.xts <- cpi_q.xts["1978-01/2022-03"]
 ## ----plot cpi, fig.align='center', echo=FALSE---------------------------------
 plot.xts(cpi_q.xts, main = "Singapore Quarterly CPI from 1978Q1 to 2022Q1")
 
-## ----seasonality in cpi, fig.align='center', echo=FALSE-----------------------
-boxplot(cpi_q.xts ~ cycle(cpi_q.xts),
-        ylab = "Quarterly CPI",
-        xlab = "Quarters")
-
 ## ----convert and subset dspi qtrly--------------------------------------------
 dspi_q.xts <- xts::apply.quarterly(dspi.xts, FUN = mean)
 
@@ -151,11 +147,6 @@ dspi_q.xts <- dspi_q.xts["1978-01/2022-03"]
 
 ## ----plot dspi, fig.align='center', echo=FALSE--------------------------------
 plot.xts(dspi_q.xts, main = "Singapore Quarterly DSPI from 1978Q1 to 2022Q1")
-
-## ----seasonality in dspi, fig.align='center', echo=FALSE----------------------
-boxplot(dspi_q.xts ~ cycle(dspi_q.xts),
-        ylab = "Quarterly DSPI",
-        xlab = "Quarters")
 
 ## ----plot cli, fig.align='center', echo=FALSE---------------------------------
 plot.xts(cli.xts, main = "Singapore Quarterly CLI from 1978Q1 to 2022Q1")
