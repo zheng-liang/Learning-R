@@ -41,6 +41,8 @@ library(quantmod) # For obtaining historical prices from Yahoo Finance
 
 In this section, the different risk measures are introduced, starting with Variance/Standard Deviation as it is the fundamental risk measure of the Mean-Variance Framework developed by Harry Markowitz. Subsequently, I described the Semi-Variance/Semi-Deviation and Downside Deviation that measures only the downside risk or the negative fluctuations, followed by VaR and CVaR which measures the tail risk. The **`PerformanceAnalytics`** package provides the necessary functions for the different risk measures.
 
+### 3.1 Retrieve MSFT Data
+
 I used the stock returns of Microsoft Corporation (MSFT) to illustrate the different risk measures, which can be obtained using the **`getSymbols`** function in **`quantmod`** package.
 
 ```{r msft price}
@@ -69,7 +71,7 @@ MSFT_returns <- PerformanceAnalytics::Return.calculate(prices = MSFT[,6], # Use 
 head(MSFT_returns, 4)
 ```
 
-### 3.1 Variance and Standard Deviation
+### 3.2 Variance and Standard Deviation
 
 The variance measures the sum of squared deviations from the expected return and this can be written as:
 
@@ -101,7 +103,7 @@ PerformanceAnalytics::kurtosis(MSFT_returns, method = "sample")
 
 The daily return distribution of MSFT is slightly positively skewed, and has a higher kurtosis of 3.54 than the normal distribution of 3. Majority of the daily returns are concentrated around the mean as can be seen in the chart, but the tails are fatter, meaning that there can be extremely large monthly losses or gains. Hence, the monthly returns of MSFT may not normally distributed (can be confirmed with a formal test, such as Jarque-Bera or Shapiro-Wilks Test).
 
-### 3.2 Semi-Variance and Semi-Deviation
+### 3.3 Semi-Variance and Semi-Deviation
 
 The semi-variance and semi-deviation is similar to the variance and standard deviation, except that it only measures deviations below the expected return or the downside risk. The semi-deviation formula is written as:
 
@@ -119,7 +121,7 @@ MSFT_semidev
 
 By using the semi-deviaion as a measure of risk, MSFT now has lower risk than if we had used the standard deviation (0.043 < 0.062). However, we are unable to use semi-deviation to determine the range of values that the daily returns would fall under a given probability, as we did using the standard deviation.
 
-### 3.3 Downside Deviation
+### 3.4 Downside Deviation
 
 The downside deviation is similar to the semi-deviation, but it measures deviations below a target return (called the Minimum Acceptable Return or MAR). The formula is written as:
 
@@ -137,7 +139,7 @@ MSFT_downdev
 
 Because the MAR is lesser than the expected MSFT daily return, we should obtain a smaller DD value than the semi-deviation. The DD might be a better measure of risk than the semi-deviation since the expected return may not be a good measure of the MAR.
 
-### 3.4 Value-at-Risk
+### 3.5 Value-at-Risk
 
 VaR measures the amount of loss that could occur over a specific time period, given a confidence level. For example, a 95% VaR of \$1 million with a time period of 1 month means that we are 95% confident that the loss would not exceed \$1 million. We can also rephrase it as we are 5% confident that the loss is greater than \$1 million over 1 month. The plot shows how VaR is indicated on a distribution of returns:
 
@@ -187,7 +189,7 @@ Based on the Modified VaR, we are 95% confident that the monthly loss in MSFT wo
 
 While VaR allows us to determine the amount of loss that could occur within a time period at a given confidence interval, it does not actually quantify the loss that could occur beyond the VaR.
 
-### 3.5 Conditional Value-at-Risk
+### 3.6 Conditional Value-at-Risk
 
 CVaR, also known as the expected shortfall (ES) or expected tail loss (ETL) measures the loss occurring beyond the VaR. Similar to VaR, the calculation of CVaR can be based on the historical, parametric, or modified methods. In the **`PerformanceAnalytics`** package, the functions **`CVaR`**, **`ES`** and **`ETL`** are equivalent. For a 95% CVaR, we calculate the average of the 5% tail loss. 
 
@@ -221,11 +223,11 @@ MSFT_modcvar
 
 Based on the modified CVaR, the average loss in the 5% tail of the return distribution is 0.108.
 
-### 3.6 Summary of Risk Measures
+### 3.7 Summary of Risk Measures
 
 In this section, we have seen the different variations of risk measures, with the standard deviation, semi-deviation and downside deviation measuring fluctuations of returns around or below a specified value and VaR and CVaR measuring the tail losses.
 
-Here are the values of the risk measures calculated in this section, summarized into two categories:
+Here are the values of the risk measures calculated in this section:
 
 ```{r summary of risk measures}
 c(Std_Dev = MSFT_stddev, Semi_Dev = MSFT_semidev, Downside_Dev = MSFT_downdev)
@@ -286,13 +288,13 @@ returns <- na.omit(PerformanceAnalytics::Return.calculate(price_data, method = "
 head(returns); nrow(returns)
 ```
 
-With the `returns` data, we can proceed with optimizing the portfolios based on different risk measures. I created portfolios that minimizes the different risk measures in Section 5 and optimal portfolios that minimizes risk for a given level of return in Section 6.
+With the `returns` data, we can proceed with optimizing the portfolios based on different risk measures.
 
-## 5 Minimum Risk Portfolios {.tabset .tabset-pills}
+## 5 Portfolio Specification and Random Portfolios {.tabset .tabset-pills}
 
-In this section, I would start by creating the minimum variance portfolio, followed by portfolios with minimum semi-variance, downside deviation, VaR and CVaR. The creation of these portfolios require the package **`PortfolioAnalytics`**. 
+### 5.1 Create Portfolio Specification
 
-Before proceeding with the creation of portfolio objectives to minimize risk, I have created an initial portfolio specification with common constraints. It includes a sum of weight and individual asset weight constraints, which can be used throughout the different portfolio optimization problems.
+Before optimizing portfolios, I have created an initial portfolio specification with common constraints. It includes a sum of weight and individual asset weight constraints, which can be used throughout the different portfolio optimization problems.
 
 ```{r initial portfolio spec}
 init_spec <- PortfolioAnalytics::portfolio.spec(assets = colnames(returns))
@@ -308,7 +310,9 @@ init_spec <- add.constraint(portfolio = init_spec,
                             min = 0, max = 0.20)
 ```
 
-While the `ROI` solver can be used with var/StdDev and ETL/ES/CVaR risk objectives, it cannot be used with VaR and other downside risk measures. As such, I have opted to use the random portfolios method for optimization. The number of permutations of random portfolios satisfying the portfolio constraints and objectives may be a problem if a small number of permutation is chosen, and may not allow for satisfactory comparison across portfolios. To run a very large number of permutations require time and computing power.
+While the `ROI` solver can be used with var/StdDev and ETL/ES/CVaR risk objectives, it cannot be used with VaR and other downside risk measures. As such, I have opted to use the random portfolios method for optimization. Generating random portfolios that satisfy the portfolio constraints and objectives may be a problem if a small number of permutation was chosen, and may not allow for satisfactory comparison of performance. To run a very large number of permutations would require time and computing power.
+
+### 5.2 Create Random Portfolios
 
 Create random portfolios satisfying the above constraints:
 
@@ -353,7 +357,11 @@ dim(output1)
 
 We can see that there are 148 rows and 24999 columns, corresponding to number of observations in `returns` and number of random portfolios in `randport` respectively. The `total_time` shows the time taken to calculate the 24,999 random portfolio returns. The time elapsed (in seconds) gives us an idea of the amount of time needed to calculate returns of all random portfolios.
 
-### 5.1 Minimum Variance Portfolio
+## 6 Minimum Risk Portfolios {.tabset .tabset-pills}
+
+In this section, I would start by creating the minimum variance portfolio, followed by portfolios with minimum semi-variance, downside deviation, VaR and CVaR. The creation of these portfolios require the package **`PortfolioAnalytics`**. 
+
+### 6.1 Minimum Variance Portfolio
 
 With the monthly returns of every random portfolio in `output1`, we can calculate the standard deviation and find the minimum to obtain the minimum variance portfolio.
 
@@ -369,7 +377,7 @@ weight_MinVar <- randport[which.min(stddev_search),]
 weight_MinVar
 ```
 
-### 5.2 Minimum Semi-Deviation Portfolio
+### 6.2 Minimum Semi-Deviation Portfolio
 
 Optimize portfolio based on minimum semi-deviation:
 
@@ -383,7 +391,7 @@ weight_MinSemiDev <- randport[which.min(semidev_search),]
 weight_MinSemiDev
 ```
 
-### 5.3 Minimum Downside Deviation Portfolio
+### 6.3 Minimum Downside Deviation Portfolio
 
 Optimize portfolio based on minimum downside deviation:
 
@@ -397,7 +405,7 @@ weight_MinDD <- randport[which.min(downdev_search),]
 weight_MinDD
 ```
 
-### 5.4 Minimum Value-at-Risk Portfolio
+### 6.4 Minimum Value-at-Risk Portfolio
 
 For VaR, I would use the historical VaR, although one could experiment with other VaR methods. Since the VaR measure is negative, we want to find the highest negative measure (i.e. closer to or more than 0). If VaR was framed as a positive measure, we would simply minimize the VaR.
 
@@ -413,7 +421,7 @@ weight_MinHVaR <- randport[which.max(hvar_search),]
 weight_MinHVaR
 ```
 
-### 5.5 Minimum Conditional Value-at-Risk Portfolio
+### 6.5 Minimum Conditional Value-at-Risk Portfolio
 
 Similar to the VaR portfolio optimization, I would use the historical CVaR.
 
@@ -429,9 +437,9 @@ weight_MinHCVaR <- randport[which.max(hcvar_search),]
 weight_MinHCVaR
 ``` 
 
-### 5.6 Summary of Minimum Risk Portfolios {.tabset}
+### 6.6 Summary {.tabset}
 
-#### 5.6.1 Merge Minimum Risk Portfolios
+#### 6.6.1 Merge Portfolios
 
 Now that we have created the different portfolios by minimizing different risk measures, we can compare the weights of their components, their performance and chart their cumulative returns.
 
@@ -458,7 +466,7 @@ return_comp <- cbind(output1[, which.min(stddev_search)],
 head(return_comp)
 ```
 
-#### 5.6.2 Benchmark
+#### 6.6.2 Benchmark
 
 An appropriate benchmark would be needed if we wish to properly compare the performance of our portfolios. I am using the SPDR S&P 500 ETF, which tracks the S&P 500 Large-Cap Index.
 
@@ -475,7 +483,7 @@ benchmark_return <- na.omit(PerformanceAnalytics::Return.calculate(prices = benc
 head(benchmark_return); dim(benchmark_return)
 ```
 
-#### 5.6.3 Plot Cumulative Return
+#### 6.6.3 Plot Cumulative Return
 
 After compiling the returns, we can plot their cumulative returns using **`chart.CumReturns`** and compare their drawdowns by using 
 
@@ -493,7 +501,7 @@ PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return),
 
 The minimum risk portfolios all had better cumulative returns than the SPY benchmark. In descending order of cumulative returns based on the chart, `Min_HCVaR` > `Min_DownDev` > `Min_HVaR` > `Min_SemiDev` > `Min_Var` portfolios. In general, the SPY benchmark has larger drawdowns than the minimum risk portfolios.
 
-#### 5.6.4 Performance Metrics and Statistics
+#### 6.6.4 Performance Metrics and Statistics
 
 ```{r stats and annualized metrics of minimum risk portfolios}
 table.AnnualizedReturns(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, geometric = T, digits = 4)
@@ -505,7 +513,9 @@ table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 12, Rf = 0.02/12, di
 table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, MAR = 0.03/12, digits = 4)
 ```
 
-## 6 Optimal Portfolio Selection With Target Return {.tabset .tabset-pills}
+## 7 Optimal Portfolio Selection With Target Return {.tabset .tabset-pills}
+
+### 7.1 Mean Return Target
 
 In this section, I optimized portfolios based on a target return of 20% annually. Since we have generated random portfolios in Section 5, I used that to determine the subset of portfolios that meets the target return requirement. The reason for doing this is because random portfolios generated using **`random_portfolios`** function does not account for the return constraint.
 
@@ -527,7 +537,7 @@ Out of 24,999 random portfolios generated in Section 5, only 796 portfolios meet
 sub_randport <- randport[target_return == "TRUE",]
 ```
 
-### 6.1 Mean-Variance Portfolio
+### 7.2 Mean-Variance Portfolio
 
 Optimize portfolio based on mean-variance:
 
@@ -541,7 +551,7 @@ weight_MeanVar <- sub_randport[which.min(meanvar_search),]
 weight_MeanVar
 ```
 
-### 6.2 Mean-Semi Deviation Portfolio
+### 7.3 Mean-Semi Deviation Portfolio
 
 Optimize portfolio based on mean-semi deviation:
 
@@ -555,7 +565,7 @@ weight_MeanSemiDev <- sub_randport[which.min(meansemidev_search),]
 weight_MeanSemiDev
 ```
 
-### 6.3 Mean-Downside Deviation Portfolio
+### 7.4 Mean-Downside Deviation Portfolio
 
 Optimize portfolio based on mean-downside deviation:
 
@@ -569,7 +579,7 @@ weight_MeanDownDev <- sub_randport[which.min(meandowndev_search),]
 weight_MeanDownDev
 ```
 
-### 6.4 Mean-VaR Portfolio
+### 7.5 Mean-VaR Portfolio
 
 Optimize portfolio based on mean-VaR:
 
@@ -583,7 +593,7 @@ weight_MeanVaR <- sub_randport[which.max(meanVaR_search),]
 weight_MeanVaR
 ```
 
-### 6.5 Mean-CVaR Portfolio
+### 7.6 Mean-CVaR Portfolio
 
 Optimize portfolio based on mean-CVaR:
 
@@ -597,9 +607,9 @@ weight_MeanCVaR <- sub_randport[which.max(meanCVaR_search),]
 weight_MeanCVaR
 ```
 
-### 6.6 Summary of Mean-Risk Portfolios {.tabset}
+### 7.7 Summary {.tabset}
 
-#### 6.6.1 Merge Mean-Risk Portfolios
+#### 7.7.1 Merge Portfolios
 
 With the different optimal portfolios created, we can now compare their weights, performance and chart their cumulative returns.
 
@@ -628,7 +638,7 @@ return_comp <- cbind(subrp_return[, which.min(meanvar_search)],
 head(return_comp)
 ```
 
-#### 6.6.2 Plot Cumulative Return
+#### 7.7.2 Plot Cumulative Return
 
 ```{r plot performance chart of optimal portfolios, message=FALSE, warning=FALSE}
 PerformanceAnalytics::chart.CumReturns(R = cbind(return_comp, benchmark_return), 
@@ -644,7 +654,7 @@ PerformanceAnalytics::chart.Drawdown(R = cbind(return_comp, benchmark_return),
 
 With an additional constraint of having 20% target return, the optimal portfolios have similar cumulative returns (since we added a target return). The SPY benchmark still has larger drawdowns compared to the optimal portfolios in general.
 
-#### 6.6.3 Performance Metrics and Statistics
+#### 7.7.3 Performance Metrics and Statistics
 
 Below are the common statistics and performance metrics that can be compared to the SPY benchmark.
 
@@ -658,7 +668,7 @@ table.CAPM(Ra = return_comp, Rb = benchmark_return, scale = 12, Rf = 0.02/12, di
 table.DownsideRisk(R = cbind(return_comp, benchmark_return), scale = 12, Rf = 0.02/12, MAR = 0.03/12, digits = 4)
 ```
 
-## 7 Final Remarks
+## 8 Final Remarks
 
 While variance and standard deviation have been commonly used as a measure of risk, other downside risk measures may be better suited to quantify the risks that investors face. In Section 5, we see that the other minimum risk portfolios have higher cumulative returns than the minimum variance portfolio, but had drawdowns that were generally between that of the minimum variance portfolio and the SPY benchmark. In Section 6, the mean-variance portfolio had similar cumulative returns and drawdowns compared to the other optimal portfolios of different risk measures. This might be due to the limited permutations of random portfolios generated, which stems from the limited computational power and the expected time I was willing to wait for the random portfolios to be created.
 
