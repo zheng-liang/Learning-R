@@ -12,8 +12,11 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE)
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 ```
+
+Updated on: `r Sys.Date()`
 
 ## 1 Introduction
 
@@ -33,7 +36,7 @@ library(urca) # For unit root tests
 library(stargazer) # For tidy regression output and tables, where possible
 ```
 
-## 3 Description of Variables
+## 3 Description of Variables {.tabset .tabset-pills}
 
 In this section, I briefly described the four variables that were used in the project and their expected univariate relationship with the S&P 500. I would be using the weekly data of each variable since data for Initial Jobless Claims is released weekly.
 
@@ -318,7 +321,7 @@ corrplot(corr = corr_stationary, method = "color", type = "lower", title = "Corr
 
 When all variables are at levels, TYS, VIX and IJC were negatively correlated to SPY as I had expected. But the stationary variables paint a different picture. The weekly change in TYS was positively correlated with SPY returns, VIX negatively correlated with SPY returns, and weekly percentage change in IJC was slightly negatively correlated with SPY returns. 
 
-## 4 Building the Regression Models
+## 4 Building the Regression Models {.tabset .tabset-pills}
 
 In this section, three different types of regression models will be created with `returns_spy` as the dependent variable, namely an ARMA model, ARDL models with one independent variable and ARDL model with all independent variables.
 
@@ -367,9 +370,9 @@ lines(zoo(x = fitted(arma), order.by = index(returns_spy["/2022-05",])), col = "
 legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
 ```
 
-### 4.2 Autoregressive Distributed Lag (ARDL) Model With One Independent Variable
+### 4.2 Autoregressive Distributed Lag (ARDL) Model With One Independent Variable {.tabset}
 
-I would build three ARDL models, one for each independent variable. This is to test how the variables affect the SPY returns individually. For this, I would use the **`auto_ardl`** function in the **`ARDL`** package.
+I would build three ARDL models, one for each independent variable, to test how the variables affect the SPY returns individually. For this, I would use the **`auto_ardl`** function in the **`ARDL`** package.
 
 #### 4.2.1 Regress SPY Returns on Treasury Yield Spread
 
@@ -505,7 +508,7 @@ lines(fitted(spyall$best_model), col = "red", type = "l", lwd = 1.5)
 legend(x = "bottomleft", legend = c("Actual Returns", "Fitted Values"), col = c("black", "red"), lwd = 2)
 ```
 
-## 5 Model Evaluation
+## 5 Model Evaluation {.tabset .tabset-pills}
 
 In this section, I evaluated the out-of-sample forecasting accuracy for the ARMA model and the ARDL with all independent variables model. I forecasted 4 periods ahead since the test set containing June 2022 SPY returns only has 4 observations.
 
@@ -547,7 +550,9 @@ legend(x = "bottomleft",
        col = c("red", "gray", "blue", "black"), lwd = 1.5)
 ```
 
-### 5.2 ARDL Model
+### 5.2 ARDL Model {.tabset}
+
+#### 5.2.1 Re-estimating ARDL Model
 
 For the ARDL model, more steps are required to obtain a forecast since the **`forecast`** function used in the ARMA model does not work with ARDL models, and the **`ARDL`** package does not have a function for it. I would be using the **`dLagM`** package and the forecast function available in it.
 
@@ -563,6 +568,8 @@ stargazer(spyall.new$model, type = "text",
           dep.var.labels.include = F, 
           column.labels = "SPY.t")
 ```
+
+#### 5.2.2 Forecast ARDL Model
 
 ```{r forecast ARDL model}
 # Create matrix containing values of exogenous variables during forecast period

@@ -1,4 +1,5 @@
 ## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE)
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 ## ----load packages, message=FALSE, warning=FALSE------------------------------
