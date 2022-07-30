@@ -12,8 +12,11 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE)
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 ```
+
+Updated on: `r Sys.Date()`
 
 ## 1 Introduction
 
@@ -170,7 +173,7 @@ foreach(i = startdates, j = enddates) %do% {
 
 In each of the plot, we can see varying median values of differenced CPI in different quarters, which might indicate that seasonality is present in the CPI series. The seasonal patterns were also not constant, which can be seen by comparing the different plots. 
 
-## 5 Model Selection
+## 5 Model Selection {.tabset .tabset-pills}
 
 To add the effects of seasonality into the models, I would use seasonal differencing or seasonal dummies and test how they differ. For seasonal dummies, I would need to create $k - 1$ columns of dummy variables representing the different quarters.
 
@@ -416,7 +419,7 @@ lines(zoo(x = mod6$fitted, order.by = index(train)),
 legend(x = "bottomleft", legend = c("Actual", "Fitted"), col = c("black", "red"), lwd = 2)
 ```
 
-## 6 Forecasting and Model Evaluation
+## 6 Forecasting and Model Evaluation {.tabset .tabset-pills}
 
 In this section, I would forecast and evaluate the out-of-sample performance of the ARMA, SARMA, ARMAX and SARMAX models estimated in Section 5. The forecasts cover the four quarters in 2021 and the first quarter of 2022.
 
@@ -589,13 +592,15 @@ names(results) <- colnames(ptfor)
 results
 ```
 
-Based on the calculated accuracy measures, model 4 (ARMA with DSPI and CLI as external regressors, without seasonal dummies) performed best on out-of-sample forecasting. The caveat is I had used the actual data of DSPI and CLI for forecasting CPI. Real-world forecasting would require models to forecast these variables either separately or jointly, using an ARMA model or VAR model for example, or to use expert forecast/opinion. These would add to the uncertainty to forecasting and would definitely decrease accuracy of the models.
+Based on the calculated accuracy measures, model 4 (ARMA with DSPI and CLI as external regressors, without seasonal dummies) performed best on out-of-sample forecasting. The caveat is I had used the actual data of DSPI and CLI for forecasting CPI. Real-world forecasting would require models to forecast these variables either separately or jointly, using an ARMA model or VAR model for example, or to use expert forecast/opinion. These would add to the uncertainty in forecasting and would decrease accuracy of the models.
 
 Seasonal differencing in model 2 (SARIMA) yield better forecasting performance and seasonal dummies in model 3 (ARMA with seasonal dummies as external regressors) had worse performance compared to model 1(standard ARIMA). However, model 5 (ARMA with DSPI, CLI and seasonal dummies as external regressors) had better performance than model 6 (SARMA with DSPI and CLI as external regressors). More work is required to find out why there is such a difference between model 2 and 3 versus model 5 and 6.
 
 ## 7 Final Remarks
 
-Although the project set out to test the effects of seasonality on forecasting Singapore's CPI, the model with the better forecasting performance was the one without any seasonal components. The project may not be fully accurate in its estimation, since the mean of the months in a quarter were used, which may or may not have effects on seasonality. This may be an interesting topic to work on next, since I forced quarterly CPI and DSPI to be used, given that CLI was assumed to affect CPI and it had quarterly frequency. The seasonal effects also seemed to change across decades, as seen in the boxplots in Section 4, and accounting for these changes may lead to better models.
+The project set out to test the effects of seasonality on forecasting Singapore's CPI and found that the model with the better forecasting performance was the one without any seasonal components. 
+
+The project may not be fully accurate in its estimation, since the mean of the months in a quarter were used to calculate quarterly CPI and DSPI, which may or may not have effects on seasonality. This may be an interesting topic to work on next, since I forced quarterly CPI and DSPI to be used, given that CLI was assumed to affect CPI and it had quarterly frequency. The seasonal effects also seemed to change across decades, as seen in the boxplots in Section 4, and accounting for these changes may lead to better models.
 
 ## References
 
