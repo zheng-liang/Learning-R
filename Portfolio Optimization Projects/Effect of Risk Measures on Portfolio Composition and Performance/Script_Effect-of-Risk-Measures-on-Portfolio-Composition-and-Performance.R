@@ -38,7 +38,7 @@ MSFT_stddev
 
 ## ----distribution of msft returns, fig.align='center'-------------------------
 PerformanceAnalytics::chart.Histogram(MSFT_returns, 
-                                      main = "Distribution of MSFT Daily Returns",
+                                      main = "Distribution of MSFT Monthly Returns",
                                       methods = c("add.density", "add.normal"))
 
 PerformanceAnalytics::skewness(MSFT_returns, method = "sample")

@@ -93,7 +93,7 @@ However, the variance and standard deviation as a measure of risk are typically 
 
 ```{r distribution of msft returns, fig.align='center'}
 PerformanceAnalytics::chart.Histogram(MSFT_returns, 
-                                      main = "Distribution of MSFT Daily Returns",
+                                      main = "Distribution of MSFT Monthly Returns",
                                       methods = c("add.density", "add.normal"))
 
 PerformanceAnalytics::skewness(MSFT_returns, method = "sample")
@@ -327,7 +327,7 @@ randport <- random_portfolios(portfolio = init_spec,
 dim(randport) # 24999 random portfolios found
 ```
 
-With the random portfolios, I created a foreach loop to find the monhtly returns of each random portfolio in `randport`. To speed things up, I ran the **`foreach`** loop in parallel using **`dopar`**.
+With the random portfolios, I created a foreach loop to find the monthly returns of each random portfolio in `randport`. To speed things up, I ran the **`foreach`** loop in parallel using **`dopar`**.
 
 Calculate portfolio returns of every weight composition in `randport`:
 
