@@ -1,0 +1,561 @@
+---
+title: "The Somewhat Complete Guide to PerformanceAnalytics for Beginners"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show 
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE, rows.print = 5, max.print = 40)
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+In this project, I strived to produce an introductory guide to the `PerformanceAnalytics` package, which is commonly used in R for portfolio analysis. I wanted to make this guide partly because I had been confused by what the functions in the package does some times, and so it also serves to explore what the function is about.
+
+I only covered the main functions that I used frequently, and therefore the guide is only somewhat complete as the title suggests. I may update this guide as I learn and use the other functions more frequently. 
+
+## 2 Packages Required
+
+```{r load packages}
+library(dplyr) # For data manipulation and piping function
+library(PerformanceAnalytics) # For portfolio analysis and return calculation
+library(quantmod) # For retrieving data 
+```
+
+## 3 quantmod Package {.tabset .tabset-pills}
+
+Before delving into the `PerformanceAnalytics` and `PortfolioAnalytics` packages, I would briefly discuss how to retrieve stock data from Yahoo Finance using the `quantmod` package. The data retrieved here would be used for the rest of this project.
+
+The basic introduction to the `quantmod` package in this section should be enough for most people to start exploring equity portfolio analysis in R.
+
+### 3.1 Retrieve Single Stock
+
+Retrieve historical data of SPDR S&P500 ETF (SPY):
+
+```{r retrieve SPY daily}
+spy_daily <- quantmod::getSymbols(Symbols = "SPY", src = "yahoo", auto.assign = FALSE)
+
+head(spy_daily)
+
+# Check start and end date of data
+start(spy_daily); end(spy_daily)
+```
+
+The `quantmod::getSymbols()` retrieves the daily historical data of SPY, consisting of its daily open, high, low, close, volume and adjusted close. By default, the function retrieves data from 03 January 2007 to the date when the function was ran, based on `Sys.Date()` (common to lag by a day due to timezone differences). 
+
+We can retrieve data starting and ending on a specific date and change the periodicity of the data by including the arguments `from`, `to` and `periodicity`.
+
+Let's retrieve the monthly data of iShares Russell 2000 ETF (IWM) from 01 January 2005 to 01 July 2022:
+
+```{r retrieve IWM monthly}
+iwm_monthly <- quantmod::getSymbols(Symbols = "IWM", src = "yahoo", auto.assign = FALSE, 
+                                    from = as.Date("2005-01-01"), to = as.Date("2022-07-01"), periodicity = "monthly")
+
+head(iwm_monthly)
+
+# Check start and end date of data
+start(iwm_monthly); end(iwm_monthly)
+```
+
+We can see that the monthly data retrieved ends in June 2022 instead of July 2022. Furthermore, it returned with the dates of the first day of each month instead of the last trading day of each month, which can be confusing to some. Another way would be to use `xts::to.period()` and specify the periodicity to convert to a lower periodicity from daily data.
+
+Convert SPY daily data to weekly, monthly, quarterly and yearly periodicity using `xts::to.period()`:
+
+```{r convert SPY periodicity}
+# Convert to weekly series
+spy_weekly <- xts::to.period(x = spy_daily, period = "weeks")
+
+head(spy_weekly)
+
+# Convert to monthly series
+spy_monthly <- xts::to.period(x = spy_daily, period = "months")
+
+head(spy_monthly)
+
+# Convert to weekly series
+spy_quarterly <- xts::to.period(x = spy_daily, period = "quarters")
+
+head(spy_quarterly)
+
+# Convert to weekly series
+spy_yearly <- xts::to.period(x = spy_daily, period = "years")
+
+head(spy_yearly)
+```
+
+Using the `xts::to.period()` uses the last date of each period, unlike the case with the IWM data, which might be more intuitive to some people.
+
+### 3.2 Data Manipulation
+
+The data we have are `xts` objects, making subsetting of dates easier. This [cheatsheet](https://datacamp-community-prod.s3.amazonaws.com/72771032-0653-4d87-a798-4a83879e99c8) by DataCamp summarizes the different functions to use with `xts` objects.
+
+The IWM data is used as an example in subsetting.
+
+```{r subset IWM data by rows}
+# Subset 2013 data
+iwm_monthly["2013"]
+
+# Subset 2013 October to 2014 June data
+iwm_monthly["2013-10/2014-06"]
+```
+
+With daily data, we can also include the day within the subset command. There may be variations for subsetting depending on the index in the `xts` object.
+
+To subset columns, instead of using `iwm_monthly[, 1]` for the `IWM.Open` or `iwm_monthly[, 5]` for the `IWM.Volume` columns, we can use functions from the `quantmod` package.
+
+```{r subset IWM data by columns}
+# Subset opening prices
+quantmod::Op(iwm_monthly) %>% head()
+
+# Subset volume
+quantmod::Vo(iwm_monthly) %>% head()
+
+# Other similar functions are Hi(), Lo(), Cl(), Ad() for high, low, close and adjusted close prices
+```
+
+We can wrap the `quantmod::getSymbols()` function with these functions to retrieve only a specific column of data (or use `%>%`), which can be useful when extracting the price data of multiple stocks.
+
+### 3.3 Retrieve Multiple Stocks
+
+To retrieve multiple stocks in one go, we can use the `quantmod::getSymbols()` function in a for-loop like so:
+
+```{r retrieve multiple stocks}
+# Tickers for Nvidia, Procter & Gamble, Mastercard, Walt Disney and Costco
+tickers <- c("NVDA", "PG", "MA", "DIS", "COST")
+
+startdate <- as.Date("2012-01-01")
+enddate <- as.Date("2022-07-01")
+
+price_data <- NULL
+
+# Retrieve only the Adjusted Closing Price column
+for(t in tickers) {
+  price_data <- cbind(price_data,
+                      quantmod::getSymbols(Symbols = t, src = "yahoo", auto.assign = FALSE,
+                                           from = startdate, to = enddate, periodicity = "daily")) %>% Ad()
+}
+
+head(price_data)
+```
+
+## 4 PerformanceAnalytics Package {.tabset .tabset-pills}
+
+### 4.1 Calculating Returns
+
+The discrete and log returns are the two common methods to calculate stock returns from its price. Discrete returns are calculated as $R_t = \frac{P_t}{P_{t-1}} - 1$ and log returns are calculated as $r_t = \log \bigg(\frac{P_t}{P_{t-1}} \bigg) = \log(P_t) - \log(P_{t-1})$. When returns are small, there is minor differences between the two methods. The difference is usually noticeable when we calculate returns of stocks using different periodicity of price data.
+
+With the SPY data I had retrieved in Section 3, I would use the daily close and adjusted close price to calculate the returns. Adjusted closing price accounts for dividend data and thus can be used to approximate the dividend-adjusted return or total return of a stock. The weekly, monthly, etc. closing price is only to illustrate the differences in the return calculation as returns become larger.
+
+In R, we can calculate them manually or use `PerformanceAnalytics::Return.calculate()` for simplicity.
+
+```{r discrete returns of SPY}
+# Discrete returns of spy_daily
+spy_dailyR <- PerformanceAnalytics::Return.calculate(prices = Cl(spy_daily), method = "discrete")
+head(spy_dailyR)
+
+# Remove NA from spy_dailyR
+spy_dailyR <- na.omit(spy_dailyR)
+
+# Check that only first observation was removed
+dim(Cl(spy_daily)); dim(spy_dailyR)
+
+# Check that the Return.calculate() is the same as using manual calculation
+head(Cl(spy_daily) / stats::lag(Cl(spy_daily)) - 1)
+
+# Weekly, monthly, quarterly and yearly discrete returns to compare with log returns later
+spy_weeklyR <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_weekly), method = "discrete"))
+
+spy_monthlyR <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_monthly), method = "discrete"))
+
+spy_quarterlyR <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_quarterly), method = "discrete"))
+
+spy_yearlyR <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_yearly), method = "discrete"))
+```
+
+```{r log returns of SPY}
+# Log returns of spy_daily
+spy_dailylog <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_daily), method = "log"))
+head(spy_dailylog)
+
+# Check that Return.calculate() is the same as using manual calculation
+head(log(Cl(spy_daily) / stats::lag(Cl(spy_daily))))
+
+# Weekly, monthly, quarterly and yearly log returns
+spy_weeklylog <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_weekly), method = "log"))
+
+spy_monthlylog <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_monthly), method = "log"))
+
+spy_quarterlylog <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_quarterly), method = "log"))
+
+spy_yearlylog <- na.omit(PerformanceAnalytics::Return.calculate(prices = Cl(spy_yearly), method = "log"))
+```
+
+```{r compare discrete and log returns}
+cbind(spy_dailyR, spy_dailylog) %>% `colnames<-`(c("Daily Discrete Return", "Daily Log Return")) %>% head()
+
+cbind(spy_weeklyR, spy_weeklylog) %>% `colnames<-`(c("Weekly Discrete Return", "Weekly Log Return")) %>% head()
+
+cbind(spy_monthlyR, spy_monthlylog) %>% `colnames<-`(c("Monthly Discrete Return", "Monthly Log Return")) %>% head()
+
+cbind(spy_quarterlyR, spy_quarterlylog) %>% `colnames<-`(c("Quarterly Discrete Return", "Quarterly Log Return")) %>% head()
+
+cbind(spy_yearlyR, spy_yearlylog) %>% `colnames<-`(c("Yearly Discrete Return", "Yearly Log Return")) %>% head()
+```
+
+```{r returns of SPY using adjusted price}
+# Discrete returns using adjusted price
+adjspy_dailyR <- na.omit(PerformanceAnalytics::Return.calculate(prices = Ad(spy_daily), method = "discrete"))
+
+# Log returns using adjusted price
+adjspy_dailylog <- na.omit(PerformanceAnalytics::Return.calculate(prices = Ad(spy_daily), method = "log"))
+
+cbind(spy_dailyR, adjspy_dailyR, spy_dailylog, adjspy_dailylog) %>% 
+  `colnames<-`(c("Discrete Return", "Discrete Adjusted Return", "Log Return", "Log Adjusted Return")) %>% 
+  head()
+```
+
+There is very small differences between the returns calculated using closing prices and adjusted closing prices, but when we calculate the cumulative returns later, there would be a huge difference.
+
+### 4.2 Distribution of Returns
+
+The distribution of returns may be useful when dealing with papers or work related to the non-normality of financial returns.
+
+Use `PerformanceAnalytics::chart.Histogram()` to view the histogram of monthly discrete returns:
+
+```{r chart distribution of returns}
+# Chart distribution of returns
+PerformanceAnalytics::chart.Histogram(R = spy_monthlyR, 
+                                      main = "Distribution of SPY Monthly Returns")
+
+# Chart density of returns and normal distribution
+PerformanceAnalytics::chart.Histogram(R = spy_monthlyR, 
+                                      main = "Density Plot of SPY Monthly Returns", 
+                                      methods = c("add.density", "add.normal"))
+
+# Chart distribution of returns with VaR and Modified VaR risk metrics
+PerformanceAnalytics::chart.Histogram(R = spy_monthlyR,
+                                      main = "VaR and Modified VaR", 
+                                      methods = "add.risk")
+
+# Chart distribution of returns with Q-Q plot
+PerformanceAnalytics::chart.Histogram(R = spy_monthlyR, 
+                                      main = "Return Distribution with Q-Q plot", 
+                                      methods = "add.qqplot")
+```
+
+Use `PerformanceAnalytics::table.Distributions()` to obtain distribution statistics, such as standard deviation, skewness and kurtosis:
+
+```{r table of distribution statistics}
+# Table of distribution statistics
+PerformanceAnalytics::table.Distributions(R = spy_monthlyR) %>% `colnames<-`("SPY Monthly Returns")
+
+# PerformanceAnalytics package has individual functions for these statistics
+# E.g. StdDev(), skewness(), kurtosis() can have different methods of calculation
+```
+
+### 4.3 Plot Cumulative Returns
+
+The calculation of cumulative returns for discrete and log returns are different. Geometric chaining tend to be used with discrete returns, while arithmetic chaining is used with log returns.
+
+Geometric chaining takes into account the effects of compounding over time, and the $k$-period returns is $(1+R) = (1+R_1) \times (1+R_2) \times (1+R_3) \times \dotsc \times (1+R_k)$. Arithmetic chaining simply sums the returns and is best used with log returns as log returns can be added across time. The $k$-period returns using arithmetic chaining is $r = r_1 + r_2 + r_3 + \dotsc + r_k$. Although it is easy to find the cumulative returns of an asset with log returns, it is usually not used when calculating portfolio returns as it cannot be added across assets.
+
+Chart cumulative daily discrete returns of SPY using arithmetic and geometric chaining with `PerformanceAnalytics::chart.CumReturns()`:
+
+```{r chart cumulative discrete returns}
+par(mfrow = c(2,1))
+
+PerformanceAnalytics::chart.CumReturns(R = spy_dailyR, geometric = FALSE, main = "Arithmetic Chaining")
+
+PerformanceAnalytics::chart.CumReturns(R = spy_dailyR, geometric = TRUE, main = "Geometric Chaining")
+```
+
+To understand further about what is going on with the formula, I calculated the cumulative returns using `base::cumsum()` for arithmetic chaining and `base::cumprod()` for geometric chaining:
+
+```{r cumsum and cumprod for return chaining}
+# Arithmetic chaining is simply the cumulative sum of returns
+cs_spyR <- base::cumsum(x = spy_dailyR)
+
+# Geometric chaining is the cumulative product of returns
+cp_spyR <- base::cumprod(x = spy_dailyR + 1) - 1
+
+cbind(cs_spyR, cp_spyR) %>% 
+  `colnames<-`(c("Cumulative Sum", "Cumulative Product")) %>% head()
+```
+
+The plot of the cumulative sum and cumulative product of returns is the same as the arithmetic and geometric chaining of returns respectively:
+
+```{r plot cs_spyR and cp_spyR}
+par(mfrow = c(2,1))
+
+plot(cs_spyR, main = "Cumulative Sum of SPY Daily Returns")
+
+plot(cp_spyR, main = "Cumulative Product of SPY Daily Returns")
+```
+
+Digressing from the main purpose of this project for a while, I wished to show that using closing prices and adjusted closing prices can have very different effects on portfolio analysis. Using the SPY prices as a simple example, I had calculated the returns from both closing and adjusted closing price in Section 4.1.
+
+Plot the cumulative returns of the closing and adjusted closing price:
+
+```{r returns of adjusted vs non-adjusted closing price}
+spy_returns <- cbind(spy_dailyR, adjspy_dailyR) %>% `colnames<-`(c("Non-Adjusted", "Adjusted"))
+
+PerformanceAnalytics::charts.PerformanceSummary(R = spy_returns, 
+                                                geometric = TRUE,
+                                                main = "Adjusted vs Non-Adjusted Returns")
+```
+
+Therefore, choosing whether to use the adjusted or non-adjusted closing prices to calculate returns can have an effect on portfolio analysis.
+
+### 4.4 Plot Drawdowns
+
+The drawdown measures the percentage decline in value of an investment from a peak to a trough. The recovery from the trough to its previous peak can also be an important consideration.
+
+Use `PerformanceAnalytics::chart.Drawdown()` to plot the drawdown of SPY:
+
+```{r plot drawdown of SPY}
+PerformanceAnalytics::chart.Drawdown(R = spy_dailyR, geometric = TRUE, main = "Drawdown of SPY")
+```
+
+The drawdown chart by itself may sometimes be insufficient, and adding the cumulative return chart may be wanted. `PerformanceAnalytics::charts.PerformanceSummary()` returns both cumulative return and drawdown charts:
+
+```{r plot performance summary of SPY}
+PerformanceAnalytics::charts.PerformanceSummary(R = spy_dailyR, geometric = TRUE, main = "SPY Performance")
+```
+
+The `PerformanceAnalytics::table.Drawdowns()` returns the summary of drawdown statistics in a table:
+
+```{r table drawdown summary of SPY}
+# Show the top 5 drawdown of SPY
+PerformanceAnalytics::table.Drawdowns(R = spy_dailyR, top = 5, geometric = TRUE)
+```
+
+### 4.5 For Multiple Stocks {.tabset .tabset-pills}
+
+In this section, I explored functions that are used for analyzing multi-stock portfolios.
+
+#### 4.5.1 Calculating Portfolio Returns (Basic)
+
+`PerformanceAnalytics::Return.portfolio()` allows us to calculate the returns of portfolios based on the individual asset returns and the weights of the assets in the portfolio. To understand how these functions work, I used the verbose mode which returns a list of intermediary calculations. Calling `?Return.portfolio` shows what is returned when `verbose = TRUE`:
+
+* **returns**: The portfolio returns.
+
+* **contribution**: The per period contribution to portfolio return of each asset. Contribution is calculated as BOP weight times the period's return divided by BOP value. Period contributions are summed across the individual assets to calculate portfolio return
+
+* **BOP.Weight**: Beginning of Period (BOP) Weight for each asset. An asset's BOP weight is calculated using the input weights (or assumed weights, see below) and rebalancing parameters given. The next period's BOP weight is either the EOP weights from the prior period or input weights given on a rebalance period.
+
+* **EOP.Weight**: End of Period (BOP) Weight for each asset. An asset's EOP weight is the sum of the asset's BOP weight and contribution for the period divided by the sum of the contributions and initial weights for the portfolio.
+
+* **BOP.Value**: BOP Value for each asset. The BOP value for each asset is the asset's EOP value from the prior period, unless there is a rebalance event. If there is a rebalance event, the BOP value of the asset is the rebalance weight times the EOP value of the portfolio. That effectively provides a zero-transaction cost change to the position values as of that date to reflect the rebalance. Note that the sum of the BOP values of the assets is the same as the prior period's EOP portfolio value.
+
+* **EOP.Value**: EOP Value for each asset. The EOP value is for each asset is calculated as (1 + asset return) times the asset's BOP value. The EOP portfolio value is the sum of EOP value across assets.
+
+* To calculate BOP and EOP position value, we create an index for each position. The sum of that value across assets represents an indexed value of the total portfolio. Note that BOP and EOP position values are only computed when geometric = TRUE.
+
+If weights are not supplied, the function assumes an equal-weight portfolio:
+
+```{r portfolio returns with geometric chaining}
+# Calculate discrete returns of stocks in price_data
+return_data <- na.omit(PerformanceAnalytics::Return.calculate(prices = price_data, method = "discrete"))
+
+# Do not supply weight and set geometric = TRUE for this example
+port_return1 <- PerformanceAnalytics::Return.portfolio(R = return_data, 
+                                                       weights = NULL, 
+                                                       geometric = TRUE, 
+                                                       verbose = TRUE)
+
+# Portfolio returns
+data.frame(port_return1$returns)
+
+# Contribution of individual asset to portfolio returns
+data.frame(port_return1$contribution)
+
+# Beginning of period weights
+data.frame(port_return1$BOP.Weight)
+
+# End of period weights
+data.frame(port_return1$EOP.Weight)
+
+# Beginning of period value
+data.frame(port_return1$BOP.Value)
+
+# End of period value
+data.frame(port_return1$EOP.Value)
+```
+
+We can see that the `BOP.Weight` and `BOP.Value` is basically the previous period `EOP.Weight` and `EOP.Value`, except for the first row, when we started the portfolio with equal weights, and therefore we have equal portfolio value distributed across assets.
+
+If we set `geometric = FALSE`:
+
+```{r portfolio returns without geometric chaining}
+# Set geometric = FALSE for this example
+port_return2 <- PerformanceAnalytics::Return.portfolio(R = return_data, 
+                                                       weights = NULL, 
+                                                       geometric = FALSE, 
+                                                       verbose = TRUE)
+
+# Portfolio returns
+data.frame(port_return2$returns)
+
+# Contribution of individual asset to portfolio returns
+data.frame(port_return2$contribution)
+
+# Beginning of period weights
+data.frame(port_return2$BOP.Weight)
+
+# End of period weights
+data.frame(port_return2$EOP.Weight)
+```
+
+The `BOP.Weight` is constant at 0.2 and the `returns` are different. The returns when `geometric = FALSE` should be the weighted average of the asset returns based on the starting weights.
+
+```{r check returns calculation}
+cbind(rowSums(return_data * 0.2), port_return2$returns) %>% 
+  `colnames<-`(c("Manual Calculation", "From Function")) %>% head()
+```
+
+Since I only used the package to learn and perform simple portfolio analysis, I had not encountered a situation where I would set `geometric = FALSE` to calculate portfolio returns. One hypothetical case of using this may be to calculate the performance of a portfolio that is bought and sold on the same day (or week or any period), but why one would calculate that is beyond me.
+
+#### 4.5.2 Calculating Portfolio Returns (Advanced)
+
+In the `PerformanceAnalytics::Return.portfolio()` function, we can state a vector or time series of weights and a rebalancing frequency of either "days", "weeks", "months", "quarters" or "years". If a rebalancing frequency was not supplied, a buy and hold strategy is assumed. If a time series of weights is supplied, the rebalancing frequency is ignored by the function.
+
+Let's assume a portfolio of 30% NVDA, 20% PG, 15% MA, 15% DIS and 20% COST and is rebalanced weekly (this is for the purpose of simplifying the example and does not necessarily follow practical strategies):
+
+```{r portfolio weights rebalanced weekly}
+# State vector of weights in order of their columns in return_data
+w <- c(0.3, 0.2, 0.15, 0.15, 0.2)
+
+# Monthly rebalancing 
+wk_rebal <- PerformanceAnalytics::Return.portfolio(R = return_data,
+                                                   weights = w,
+                                                   geometric = TRUE,
+                                                   rebalance_on = "weeks", 
+                                                   verbose = TRUE)
+
+# Portfolio returns
+data.frame(wk_rebal$returns)
+
+# Contribution of individual asset to portfolio returns
+data.frame(wk_rebal$contribution)
+
+# Beginning of period weights
+data.frame(wk_rebal$BOP.Weight)
+
+# End of period weights
+data.frame(wk_rebal$EOP.Weight)
+```
+
+Under `BOP.Weight`, the starting weights were exactly what I had supplied to the `weights` argument, and at the beginning of each week, the weights were rebalanced to the starting weights. 2012-01-04 was a Wednesday and the weights were rebalanced on 2012-01-09, which was on a Monday and the pattern would repeat till the week of the last observation.
+
+If I supplied a time series of weights:
+
+```{r time series of weights and rebalancing}
+# Starting weights on 2012-01-04 and change weights on 2012-01-06
+# Need to -1 from dates because rebalanced weights take effect on next day 
+# Think of it as setting the EOP weights
+ts_w <- xts(x = rbind(w, c(0.2, 0.3, 0.15, 0.2, 0.15)),
+            order.by = index(return_data[c(1,3),]) - 1)
+
+ts_w
+
+rebal_ts_w <- PerformanceAnalytics::Return.portfolio(R = return_data, 
+                                                     weights = ts_w,
+                                                     geometric = TRUE, 
+                                                     rebalance_on = "weeks",
+                                                     verbose = TRUE)
+
+# Beginning of period weights
+data.frame(rebal_ts_w$BOP.Weight)
+
+# End of period weights
+data.frame(rebal_ts_w$EOP.Weight)
+```
+
+The weekly rebalancing effect was ignored since `time_w` is a xts object.
+
+#### 4.5.3 Plot Weights
+
+Chart changes in weights over time on portfolios with and without periodic rebalancing:
+
+```{r plot weights of rebal and no rebal}
+# Plot weights of portfolio that is not rebalanced frequently
+plot(port_return1$BOP.Weight, legend.loc = "topleft")
+
+# Plot weights of portfolio rebalanced weekly
+plot(wk_rebal$BOP.Weight, legend.loc = "left")
+```
+
+#### 4.5.4 Plot Portfolio Performance
+
+Plotting the portfolio performance with the SPY as benchmark:
+
+```{r plot portfolio with benchmark}
+# Subset SPY returns such that it starts and ends on the same periods as the portfolio
+spy_benchmark <- adjspy_dailyR[paste(as.character(start(return_data)), "/", as.character(end(return_data)), sep = ""),]
+
+# Merge returns of portfolio with and without rebalancing and the spy_benchmark
+return_comp <- cbind(port_return1$returns, wk_rebal$returns, spy_benchmark) %>%
+  `colnames<-`(c("No Rebalancing", "Weekly Rebalancing", "SPY"))
+
+PerformanceAnalytics::charts.PerformanceSummary(R = return_comp, 
+                                                main = "Performance of Portfolios Against Benchmark", 
+                                                geometric = TRUE, 
+                                                legend.loc = "topleft")
+```
+
+`PerformanceAnalytics::charts.PerformanceSummary()` can be used to plot the performance of multiple portfolios. However, this can become confusing when too many portfolios are plotted. In that case, I prefer to add the argument `plot.engine = "plotly"` to use the plotly style of charts and separate the cumulative return and drawdown plots. For example, I would plot the cumulative return as such:
+
+```{r use plotly engine for performance chart}
+PerformanceAnalytics::chart.CumReturns(R = return_comp, 
+                                       main = "Cumulative Return Using Plotly", 
+                                       geometric = TRUE, 
+                                       legend.loc = "topleft",
+                                       plot.engine = "plotly")
+```
+
+#### 4.5.5 Tables of Portfolio Performance
+
+The `PerformanceAnalytics` package provides many useful functions to summarize the performance of portfolios in a table.
+
+Use `PerformanceAnalytics::table.AnnualizedReturns()` to find annualized returns, standard deviation and Sharpe Ratio:
+
+```{r annualized returns}
+# scale = 252 because returns are in daily periodicity. Use 52 for weekly, 12 for monthly, 4 for quarterly
+# Input risk-free rate to calculate Sharpe Ratio, which should be in the same periodicity as returns
+PerformanceAnalytics::table.AnnualizedReturns(R = return_comp, scale = 252, Rf = 0.03/252, geometric = TRUE)
+```
+
+Use `PerformanceAnalytics::table.CAPM()` to find CAPM measures:
+
+```{r capm measures}
+# Use SPY as benchmark (Rb)
+PerformanceAnalytics::table.CAPM(Ra = return_comp[,1:2], Rb = return_comp[,3], scale = 252, Rf = 0.03/252)
+```
+
+Use `PerformanceAnalytics::table.DownsideRisk()` to find downside risk measures:
+
+```{r downside risk measure}
+# Input Minimum Acceptable Rate (MAR) to calculate downside deviation
+PerformanceAnalytics::table.DownsideRisk(R = return_comp, scale = 252, Rf = 0.03/252, MAR = 0.07/252)
+```
+
+Use `PerformanceAnalytics::table.Stats()` to find statistics such as arithmetic and geometric mean of returns and variance:
+
+```{r summary of return statistics}
+PerformanceAnalytics::table.Stats(R = return_comp)
+```
+
+## 5 Summary
+
+It is important to know what setting `geometric = TRUE` does in the calculation of portfolio returns, when charting or other functions that require geometric chaining of returns. Using the wrong settings can have some impacts on the analysis of stock or portfolio performance. There are also separate functions in the `PerformanceAnalytics` package that calculates different risk measures, such as Value-at-Risk, Expected Tail Loss (or Expected Shortfall) and Standard Deviation, which I did not explicitly cover.
+
+I hope that this basic guide to `PerformanceAnalytics` package can help those who are new to the package or want to know what the different arguments in the function does. 
