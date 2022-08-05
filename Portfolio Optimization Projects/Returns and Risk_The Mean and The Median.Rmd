@@ -28,106 +28,67 @@ In this project, my intention is to find out if using median returns in portfoli
 ```{r load packages}
 library(doParallel) # For parallel computation in foreach loops
 library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(RColorBrewer) # For color palettes in plots
 library(tidyquant) # For quantmod and PerformanceAnalytics functions
 library(tidyverse) # For dplyr and ggplot2 functions (data manipulation and plotting)
 ```
 
 ## 3 Retrieve Stock Prices and Calculate Returns {.tabset .tabset-pills}
 
-I would sample 10 stocks randomly from the top 100 companies in the S&P500 Index by weight and retrieve their daily adjusted closing prices from Yahoo Finance, starting January 2015 to June 2022. The daily stock returns are calculated using the discrete/simple method as it is used in calculating portfolio returns.
+I retrieved the weekly adjusted closing prices of 10 stocks from Yahoo Finance, starting January 2015 to June 2022. The weekly returns are then calculated using the discrete/simple method to be used in calculating portfolio returns.
 
-### 3.1 Index Components
+The 10 stocks used in this project are Procter & Gamble (PG), Walmart (WMT), Booking Holdings (BKNG), Salesforce (CRM), 3M (MMM), Starbucks (SBUX), Walt Disney (DIS), Home Depot (HD), Coca-Cola (KO), and NVIDIA (NVDA).
 
-The S&P500 Index components can be obtained using **`tidyquant::tq_index()`**.
+### 3.1 Retrieve Price Data
 
-```{r retrieve S&P500 index components}
-# tq_index obtains data of S&P500 components from www.ssga.com 
-
-sp500 <- tidyquant::tq_index(x = "SP500")[1:100, c(1,2,5,6)]
-
-sp500
-
-tickers <- sp500$symbol
-```
-
-### 3.2 Stock Prices of Components
-
-The daily adjusted closing prices of the tickers from Yahoo Finance can be retrieved using **`quantmod::getSymbols()`**. From my previous project ([Random Selection, Expertise and Index Investing](https://tinyurl.com/2p8csyhj)), the ticker `BRK.B` is different from those used by Yahoo Finance. I corrected it before obtaining the stock prices.
+The weekly adjusted closing price of the tickers can be retrieved using **`quantmod::getSymbols()`**. 
 
 ```{r retrieve price data}
-# Correct the tickers for BRK.B
-tickers <- replace(x = tickers, list = tickers %in% c("BRK.B"), values = c("BRK-B"))
+# Vector of tickers to include in portfolio
+tickers <- c("PG", "WMT", "BKNG", "CRM", "MMM", "SBUX", "DIS", "HD", "KO", "NVDA")
 
 startdate <- as.Date("2015-01-01")
 enddate <- as.Date("2022-07-01")
 
-prices <- NULL
+price_data <- NULL
 
 # Loop to get adjusted closing prices for all stocks
-for (t in tickers) {   # Use for loop to get prices of all tickers
-   
-   tmp <- NULL
-  
-   tmp <- try(   # Use try function to skip loop and return error message when price cannot be retrieved
-       expr = {Ad(quantmod::getSymbols(Symbols = t, src = "yahoo", auto.assign = FALSE, 
-                                       from = startdate, to = enddate, periodicity = "daily"))},
-       silent = TRUE
-   )
-   
-   if(inherits(tmp, "try-error")) {cat("ERROR:", t, sep = " "); next}
-   
-   names(tmp) <- t
-   
-   prices <- cbind(prices, tmp)
+for(t in tickers) {
+  price_data <- cbind(price_data,
+                      quantmod::getSymbols(Symbols = t, src = "yahoo", auto.assign = FALSE,
+                                           from = startdate, to = enddate, periodicity = "weekly") %>% Ad())
 }
 
 # Check dimension of object, start and end date of data collected
-dim(prices); start(prices); end(prices)
+dim(price_data); start(price_data); end(price_data)
+
+# See first 6 observations in price_data
+head(price_data)
 ```
 
-I only want stocks that have data for the period January 2015 to June 2022, and those that have missing values during this period would not be considered.
-
-```{r remove stocks with missing values}
-# Check which stocks have NA over the specified period
-which(colSums(is.na(prices)) > 0)
-
-# Keep only stocks that do not have NAs over the specified period
-prices <- prices[, which(colSums(is.na(prices)) == 0)]
-
-dim(prices) # Left with 99 stocks
-```
-
-### 3.3 Stock Returns for Portfolio
-
-I sampled 10 stocks for the portfolio from `prices`.
-
-```{r sample 25 stocks from prices}
-set.seed(42564)
-
-samp_stocks <- prices[, sample(x = ncol(prices), size = 10, replace = FALSE)]
-
-# Stocks sampled into portfolio
-sp500[which(sp500$symbol %in% names(samp_stocks)),]
-```
+### 3.2 Stock Returns for Portfolio
 
 Discrete returns can be calculated using **`PerformanceAnalytics::Return.calculate()`**.
 
 ```{r calculate discrete returns}
-stock_returns <- na.omit(PerformanceAnalytics::Return.calculate(prices = samp_stocks, method = "discrete") * 100)
+return_data <- na.omit(PerformanceAnalytics::Return.calculate(prices = price_data, method = "discrete")) %>%
+  `colnames<-`(paste(tickers, "Return", sep = "."))
 
-dim(stock_returns); data.frame(head(stock_returns))
+dim(return_data); head(return_data)
 ```
 
 ## 4 Measuring Spread of Data {.tabset .tabset-pills}
 
 ### 4.1 Mean and Median
 
-The mean and median are two measures of central tendency that can be used to describe expected returns of a stock, based on historical returns. Since the distribution of stock returns tend to be non-normal, the median may be a more appropriate measure. For example, the density plot of `WMT` (Walmart Inc.) showed a higher peak with fatter and longer tails than a normal distribution. The Q-Q plot on the top-right corner also indicated that the return distribution is non-normal.
+The (arithmetic) mean and median are two measures of central tendency that can be used to describe expected returns of a stock.
 
-```{r plot historical returns of BKNG}
-chart.Histogram(R = stock_returns$WMT, 
+Since the distribution of stock returns tend to be non-normal, the median may be a more appropriate measure. For example, the density plot of `PG` shows that the returns do not follow a normal distribution. The Q-Q plot on the top-left corner also indicated a non-normal distribution.
+
+```{r plot historical returns of WMT}
+chart.Histogram(R = return_data$PG.Return, 
                 method = c("add.density", "add.normal", "add.qqplot"), 
-                main = "Density Plot of WMT Historical Returns", ylim = c(0, 0.5))
+                main = "Density Plot of PG Historical Returns")
 
 legend(x = "topright", legend = c("Density Plot", "Normal Distribution"), lwd = 2, col = c("darkblue", "blue"))
 ```
@@ -135,27 +96,23 @@ legend(x = "topright", legend = c("Density Plot", "Normal Distribution"), lwd = 
 The mean and median returns of each stock in the portfolio are:
 
 ```{r mean and median of each stock}
-stock_means <- apply(X = stock_returns, MARGIN = 2, FUN = mean)
+stock_means <- apply(X = return_data, MARGIN = 2, FUN = mean)
 
-stock_medians <- apply(X = stock_returns, MARGIN = 2, FUN = median)
+stock_medians <- apply(X = return_data, MARGIN = 2, FUN = median)
 
 data.frame(rbind(Mean = stock_means, Median = stock_medians))
 ```
 
-Since we have daily returns, the mean and median values are small, but we can see that there is a difference. The mean returns of individual stocks are usually used to calculate portfolio returns because they can be easily added across assets, and the mean portfolio return is simply the weighted mean return of its components.
-
-$E(R_p) = \sum_{i=1}^N E(R_i)w_i$, where $E(R_i)$ is the expected return of a stock and $w_i$ is the weight of the stock in the portfolio
-
-Finding median portfolio returns, $med(R_p)$, using median stock returns is more complex. It is the middle value (50th percentile) of individual stock median returns sorted in ascending order and $med(R_p)$ is where $\sum_{i=1}^{k-1} w_i \le 0.5 \text{ and } \sum_{i=k+1}^N w_i \le 0.5$
+Although the mean and median return values are quite small, we can see that there is a noticeable difference for some of the stocks.
 
 ### 4.2 Variance (or Standard Deviation)
 
-The variance measures the squared deviation of returns from the mean, but standard deviation (SD) is used since it is in the same units as returns. 
+The variance measures the squared deviation of returns from the mean, but standard deviation (SD) is used since it is in the same units as returns.
 
 The SD of each stock in the portfolio is:
 
 ```{r standard deviation of each stock}
-stock_sd <- apply(X = stock_returns, MARGIN = 2, FUN = sd)
+stock_sd <- apply(X = return_data, MARGIN = 2, FUN = sd)
 
 data.frame(rbind(SD = stock_sd))
 ```
@@ -164,25 +121,25 @@ If returns were normally distributed, we can use the 68-95-99 rule, where 68%/95
 
 ### 4.3 Mean Absolute Deviation
 
-The mean absolute deviation (MAD) is the mean of the absolute deviations between returns and a central point. The central point usually refers to the mean, but the median can be used as well.
+The mean absolute deviation (MAD) is the mean of the absolute deviations between returns and a central point. The central point usually refers to the mean, but the median can be used as well. However, since the mean and median returns are similar, we can expect that the MAD using either of these as the central point would be 
 
 $MAD = \frac{1}{N}\sum_{i=1}^N |R_i - m(R)|$, where $R_i$ is the return of a stock, and $m(R)$ is the mean or median return of the stock.
 
-The MAD around the mean of each stock in the portfolio are:
+The MAD around the mean and median of each stock in the portfolio are:
 
 ```{r MAD around mean and median of each stock}
-stock_MAD <- apply(X = stock_returns, MARGIN = 2, FUN = function(x) {
+stock_MAD <- apply(X = return_data, MARGIN = 2, FUN = function(x) {
   mean(abs(x - mean(x)))
 })
 
-stock_MADmed <- apply(X = stock_returns, MARGIN = 2, FUN = function(x) {
+stock_MADmed <- apply(X = return_data, MARGIN = 2, FUN = function(x) {
   mean(abs(x - median(x)))
 })
 
 data.frame(rbind(MAD_mean = stock_MAD, MAD_median = stock_MADmed))
 ```
 
-We can see that the MAD of each stock is smaller than its SD as SD places more weight on outliers than MAD. The MAD calculated with the mean and median are quite similar.
+We can see that the MAD of each stock is smaller than its SD as SD places more weight on outliers than MAD. The MAD calculated with the mean and median are quite similar. I would stick with using MAD around the mean as a measure of risk.
 
 ### 4.4 Median Absolute Deviation
 
@@ -193,7 +150,7 @@ $MeAD = med |R_i - med(R)|$, where $R_i$ is the return of a stock, and $med(R)$ 
 The MeAD of each stock in the portfolio is:
 
 ```{r MeAD of each stock}
-stock_MeAD <- apply(X = stock_returns, MARGIN = 2, FUN = function(x) {
+stock_MeAD <- apply(X = return_data, MARGIN = 2, FUN = function(x) {
   median(abs(x - median(x)))
 })
 
@@ -215,41 +172,70 @@ Portfolio optimization using mean returns and variance/SD and MAD as risk measur
 
 ### 5.1 Generate Random Portfolios
 
-Before optimizing any portfolios, I generated a set of random portfolios that satisfy a sum of weights equal to 1 and having individual weights between 0% and 40% of the portfolio.
+Optimization based on median measures are usually not implemented by packages and functions, so I had to use a set of random hypothetical portfolios in this project.
 
-```{r portfolio specification}
-# Initialize portfolio specification
-portspec <- PortfolioAnalytics::portfolio.spec(assets = names(stock_returns))
+Before optimizing any objectives, I generated a set of random portfolios which satisfy constraints where the sum of the component weights must be equal to 1 and the weight of each component is between 0% and 100% of the portfolio.
 
-# Sum of weights constrained to 1, can also specify type = "full_investment"
-portspec <- PortfolioAnalytics::add.constraint(portfolio = portspec, 
-                                               type = "weight_sum", 
+```{r generate set of random portfolios}
+portspec <- PortfolioAnalytics::portfolio.spec(assets = tickers)
+
+# Sum of weights constrained to 1, can also specify as type = "full investment"
+portspec <- PortfolioAnalytics::add.constraint(portfolio = portspec,
+                                               type = "weight_sum",
                                                min_sum = 1, max_sum = 1)
 
-# Weight of each stock constrained to 40% of portfolio
-portspec <- PortfolioAnalytics::add.constraint(portfolio = portspec, 
-                                               type = "box", 
-                                               min = 0, max = 0.40)
+# Weight of each portfolio component can vary between minimum of 0% and maximum of 100%
+portspec <- PortfolioAnalytics::add.constraint(portfolio = portspec,
+                                               type="box", 
+                                               min = 0, max = 1)
 
 portspec
+
+set.seed(43594)
+
+rand_port <- PortfolioAnalytics::random_portfolios(portfolio = portspec, 
+                                                   permutations = 20000, 
+                                                   rp_method = "simplex", 
+                                                   eliminate = TRUE)
+
+dim(rand_port); head(rand_port)
 ```
 
-```{r generate random portfolios}
-set.seed(94582)
+16,049 portfolio permutations were found, which will be used for the rest of this project.
 
-randport <- PortfolioAnalytics::random_portfolios(portfolio = portspec, 
-                                                  permutations = 100000, 
-                                                  rp_method = "sample", 
-                                                  eliminate = TRUE)
+### 5.2 Optimization Strategy
 
-dim(randport)
+I used three different optimization objectives in this project:
+
+1. Maximize return
+2. Minimize risk
+3. Minimize risk for a given return
+
+To make the different strategies more practical, I attempted to replicate a half-yearly re-optimization strategy using previous one year data. In this case, I would calculate the return and/or risk of the hypothetical portfolios with 2015 return data and implement the optimal weights on 2016H1. Then, I re-optimize the weights using data from 2015H2 to 2016H1 for 2016H2 and so on. The last re-optimization used 2021 data for 2022H1 since I only retrieved data up to 30 June 2022.
+
+```{r optimization and return period}
+opt_periods <- c("2015", "2015-07/2016-06", 
+                 "2016", "2016-07/2017-06", 
+                 "2017", "2017-07/2018-06", 
+                 "2018", "2018-07/2019-06", 
+                 "2019", "2019-07/2020-06", 
+                 "2020", "2020-07/2021-06", 
+                 "2021")
+
+ret_periods <- c("2016-01/2016-06", "2016-07/2016-12", 
+                 "2017-01/2017-06", "2017-07/2017-12",
+                 "2018-01/2018-06", "2018-07/2018-12",
+                 "2019-01/2019-06", "2019-07/2019-12",
+                 "2020-01/2020-06", "2020-07/2020-12",
+                 "2021-01/2021-06", "2021-07/2021-12",
+                 "2022-01/2022-06")
+
+data.frame(cbind(Optimization_Period = opt_periods, Return_Period = ret_periods))
 ```
 
-Only 8,942 portfolios satisfy the constraints and I will use this set of random portfolios for the rest of this project.
+### 5.3 Daily Portfolio Returns
 
-### 5.2 Daily Portfolio Returns
-
-With the set of random portfolios, I calculated their daily returns based on the formula $R_p = \sum_{i=1}^N R_i w_i$. Adding the argument **`rebalance_on = "quarters"`** rebalances the portfolios' weights to their starting weights every quarter (first day of January, April, July and October each year). This would be useful later when we optimize the portfolio weights according to different objectives.
+The weekly returns of hypothetical portfolios can be calculated using `opt_periods` and `randport` and is based on the formula $R_p = \sum_{i=1}^N R_i w_i$. I used geometric chaining to aggregate returns and rebalanced the portfolios quarterly. We can use the performance of random portfolios in each optimization period to select portfolio weights that optimized that period's return and/or risk.
 
 ```{r random portfolio returns}
 # Use foreach loop in parallel with dopar
@@ -260,41 +246,137 @@ mycluster <- makeCluster(6) # Number of cores to use. I have 8, but may not be s
 # Register parallel computing
 registerDoParallel(mycluster)
 
-rp_returns <- foreach(i = 1:nrow(randport), .combine = "cbind") %dopar% {
-  tmp_return <- PerformanceAnalytics::Return.portfolio(R = stock_returns, 
-                                                       weights = randport[i, ], 
-                                                       geometric = TRUE, 
-                                                       rebalance_on = "quarters")
-}
+rp_returns <- foreach(i = opt_periods) %:%
+  foreach(j = 1:nrow(randport), .combine = "cbind") %dopar% {
+    tmp_return <- PerformanceAnalytics::Return.portfolio(R = return_data[i, ], 
+                                                         weights = randport[j, ], 
+                                                         geometric = TRUE,
+                                                         rebalance_on = "quarters")
+  }
 
 # End parallel computing
 stopCluster(mycluster)
 
-names(rp_returns) <- paste("RP", 1:nrow(randport), sep = "_")
+names(rp_returns) <- opt_periods
 
-dim(rp_returns)
+for (i in 1:length(rp_returns)) {
+  colnames(rp_returns[[i]]) <- paste("RP_", 1:nrow(randport), sep = "")
+}
 ```
 
 ## 6 Best Return Portfolio {.tabset .tabset-pills}
 
-In this section, I find portfolios that maximize mean and median returns, although these types of strategies do not make much practical sense in portfolio optimization. It assumes that investors create their portfolios based on the best historical returns. However, these strategies can give an idea of the risks taken by an investor, based on the drawdown of the portfolios.
+In this section, I find portfolios that maximize mean and median returns in each optimization period, although these types of objectives may not be practical in portfolio optimization. It assumes that investors create their portfolios based on the best historical returns. However, these strategies can give an idea of the risks taken by an investor, based on the drawdown of the portfolios.
 
 ### 6.1 Maximize Mean Return
 
 ```{r find weights for best mean return}
-# Construct foreach loop
+# Find mean portfolio return in each optimization period and find weight that maximizes mean return
+maxmean_weight <- foreach(i = 1:length(rp_returns), .combine = "rbind") %do% {
+  tmp <- PerformanceAnalytics::Mean.arithmetic(rp_returns[[i]])
+  
+  opt_weight <- randport[which.max(tmp), ]
+}
 
+rownames(maxmean_weight) <- paste("Opt_period", 1:nrow(maxmean_weight))
 
+data.frame(maxmean_weight)
 ```
 
+```{r daily return of best mean portfolio}
+# Returns of best mean portfolio in ret_period using weights from opt_period
+maxmean_returns <- foreach(i = ret_periods, j = 1:nrow(maxmean_weight), .combine = "rbind") %do% {
+  tmp <- PerformanceAnalytics::Return.portfolio(R = stock_returns[i, ], 
+                                                weights = maxmean_weight[j, ], 
+                                                geometric = TRUE, 
+                                                rebalance_on = "quarters")
+}
+```
 
+### 6.2 Maximize Median Return
 
+While the finding the mean portfolio return was simple, finding the median portfolio return from median stock returns takes a little more work.
 
+```{r find weights for best median return}
+# Find median of each stock in portfolio in each optimization period
+med_returns <- foreach(i = opt_periods, .combine = "rbind") %do% {
+    tmp <- apply(X = stock_returns[i, ], MARGIN = 2, FUN = median)
+}
 
+mycluster <- makeCluster(6) 
 
+registerDoParallel(mycluster)
 
+# Find median portfolio return in each optimization period
+portmed <- foreach(i = 1:nrow(med_returns)) %:% # outer loop on med_returns rows of data
+  foreach(j = 1:nrow(randport), .combine = "cbind") %dopar% { # inner loop on randport rows
+    x <- NULL
+    
+    for (k in 1:ncol(randport)) { # loop on randport columns
+      x <- c(x, rep(med_returns[i,k], randport[j,k] * 1000))
+    }
+    
+    y <- median(x)
+    
+    return(y)
+  }
 
+stopCluster(mycluster)
 
+# Find weights that maximizes median of each optimization period
+maxmed_weight <- foreach(i = 1:length(portmed), .combine = "rbind") %do% {
+  opt_weight <- randport[which.max(portmed[[i]]), ]
+}
+
+rownames(maxmed_weight) <- paste("Opt_period", 1:nrow(maxmed_weight))
+
+data.frame(maxmed_weight)
+```
+
+```{r daily return of best median portfolio}
+# Returns of best median portfolio in ret_period using weights from opt_period
+maxmed_returns <- foreach(i = ret_periods, j = 1:nrow(maxmed_weight), .combine = "rbind") %do% {
+  tmp <- PerformanceAnalytics::Return.portfolio(R = stock_returns[i, ], 
+                                                weights = maxmed_weight[j, ], 
+                                                geometric = TRUE, 
+                                                rebalance_on = "quarters")
+}
+```
+
+### 6.3 Comparison of Best Return Portfolios
+
+```{r plot weights of best return portfolios}
+chart.StackedBar(w = maxmean_weight, colorset = RColorBrewer::brewer.pal(n = 10, "Spectral"),
+                 main = "Optimal Weights of Best Mean Portfolio", xlab = "Optimization Period", ylab = "Weight")
+
+chart.StackedBar(w = maxmed_weight, colorset = RColorBrewer::brewer.pal(n = 10, "Spectral"),
+                 main = "Optimal Weights of Best Median Portfolio", xlab = "Optimization Period", ylab = "Weight")
+```
+
+```{r plot returns of best return portfolios}
+best_return <- cbind(maxmean_returns, maxmed_returns) %>%
+  `colnames<-`(c("Best_Mean", "Best_Median"))
+
+chart.CumReturns(R = best_return, geometric = TRUE, legend.loc = "bottomright", main = "Cumulative Return of Best Return Portfolios")
+
+chart.Drawdown(R = best_return, geometric = TRUE, legend.loc = "bottomright", main = "Drawdown of Best Return Portfolios")
+```
+
+```{r perf summary of best return portfolios}
+table.AnnualizedReturns(R = best_return, scale = 252, Rf = 0.025/252, geometric = TRUE)
+
+table.DownsideRisk(R = best_return, scale = 252, Rf = 0.025/252, MAR = 0.07/252)
+
+table.Stats(R = best_return)
+```
+
+## 7 Minimum Risk Portfolio {.tabset .tabset-pills}
+
+On the opposite spectrum, I find portfolios that minimizes risk in each optimization period in this section.
+
+### 7.1 Minimize Variance
+
+With the simple daily returns of portfolio in `rp_returns`, I can calculate the portfolio variance or standard deviation.
 
 
 
