@@ -1,0 +1,170 @@
+---
+title: "Non-Stationary Processes in Time Series Analysis"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    toc: yes
+    toc_float: yes
+    code_folding: show
+    highlight: tango
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center", message = FALSE, warning = FALSE)
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The purpose of this project was to understand non-stationary processes in time series analysis and the difference between deterministic and stochastic trend in time series variables. It also sought to find out if the treatment for achieving stationarity (differencing, de-trending, including trend in regression) affects the accuracy of out-of-sample forecast for time series with a deterministic trend.
+
+The project used a simulation of random walk and ARIMA models and added a drift and/or trend term to simulate non-stationary time series data.
+
+## 2 Packages Required
+
+```{r load packages}
+library(forecast) # For ARIMA modelling, forecasting and evaluation
+library(urca) # For unit root and stationarity tests
+```
+
+## 3 Non-Stationary Processes {.tabset .tabset-pills}
+
+In this section, the different non-stationary processes are introduced, along with the simulation of the processes.
+
+### 3.1 Random Walk
+
+I began the analysis of non-stationary processes with the random walk (RW) model as this model will lay the foundation for the models discussed later.
+
+The RW model has the form $y_t = y_{t-1} + \varepsilon_t$, where $\varepsilon_t \sim N(0, \sigma^2)$. This means that the current value is based on its previous value and a stochastic white noise component.
+
+The model can be easily rewritten with the form $y_t = y_0 + \sum_{s=1}^t \varepsilon_s$ with $E(y_t) = y_0$ and $V(y_t) = t \sigma^2$. The mean is dependent on $y_0$ and without loss of generality, $y_0 = 0$ means that $y_t$ is random and cannot be accurately predicted. The variance is dependent on and increases with time.
+
+Using **`stats::arima.sim()`**, we can simulate the RW model as such:
+
+```{r simulate RW}
+# Number of observations
+N = 500
+
+# Model to simulate
+# For RW model, only need d = 1 in (p,d,q) to include unit root
+M = list(order = c(0, 1, 0))
+
+set.seed(123)
+
+RW <- stats::arima.sim(model = M, n = N)
+
+# Plot RW
+plot(x = RW, main = "Random Walk", ylab = "y_t", lwd = 2)
+```
+
+Using **`urca::ur.df()`** and **`urca::ur.kpss`**, the Augmented Dickey Fuller test for unit root and KPSS test for stationarity can be performed:
+
+```{r ADF and KPSS tests for RW}
+RW %>% urca::ur.df(type = "none", selectlags = "AIC") %>% summary()
+
+# KPSS requires a deterministic component, either drift (mu) or trend (tau)
+RW %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test cannot be rejected (there is unit root) and the null hypothesis of the KPSS test was rejected (not stationary).
+
+### 3.2 Random Walk with Drift
+
+The second non-stationary process is a random walk model with drift (or constant). When plotted, the RW model with drift would look like a trending series. A positive/negative constant would produce a upward/downward trending RW series.
+
+This model can be represented by $y_t = \alpha + y_{t-1} + \varepsilon_t$, where $\varepsilon_t \sim N(0, \sigma^2)$. This is similar to the RW model, with the current value also affected by a drift (or constant) term.
+
+It is easily shown that the model can be rewritten as $y_t = t \alpha + y_0 + \sum_{s = 1}^t \varepsilon_s$, with $E(y_t) = t \alpha + y_0$ and $V(y_t) = t \sigma^2$. WLOG, $y_0 = 0$ shows that the mean is increasing with time. Same as the RW model, the variance of the RW model with drift is time-dependent and increases with time.
+
+Using **`stats::arima.sim()`**, we can simulate the RW model with drift as such:
+
+```{r simulate RW with drift}
+# Use same number of observations (N) and model (M) as RW model
+
+# Include a non-zero mean value and optionally the standard deviation
+# RW with positive constant
+set.seed(234)
+RW_posDrift <- stats::arima.sim(model = M, n = N, mean = 0.5, sd = 10)
+
+# RW with negative constant
+set.seed(234)
+RW_negDrift <- stats::arima.sim(model = M, n = N, mean = -0.5, sd = 10)
+
+# Plot RW with drift
+plot(x = cbind(RW_posDrift, RW_negDrift), 
+     main = "Random Walk with Drift", ylab = "y_t", 
+     plot.type = "single", 
+     col = c("black", "red"), lwd = 2)
+
+legend(x = "topleft", legend = c("RW with positive drift", "RW with negative drift"), 
+       col = c("black", "red"), lwd = 2)
+```
+
+Perform ADF and KPSS tests for just the RW model with positive constant:
+
+```{r ADF and KPSS tests for RW with drift}
+RW_posDrift %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+RW_posDrift %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test cannot be rejected (there is unit root) and the null hypothesis of the KPSS test was rejected (not stationary).
+
+### 3.3 Deterministic Trend
+
+A simple model with a deterministic trend represented by $y_t = t \alpha + \varepsilon_t$, where $\varepsilon_t \sim N(0, \sigma^2)$, is different from stochastic trend processes such as the RW model with and without drift. This model is non-stationary because a time component is involved, causing $E(y_t) = t \alpha$ such that the mean is time-dependent. By removing the time trend (de-trending), the series would be stationary since $\varepsilon_t$ is a white noise process.
+
+When plotted, values still vary up and down but returns to the trend, without ever drifting off from the trend permanently.
+
+To simulate a model with deterministic trend, a time trend needs to be created:
+
+```{r simulate simple model with deterministic trend}
+# Use same number of observations as RW model
+tt <- 1:N
+
+set.seed(345)
+
+# Set sd = 20 so that the ups and downs can be seen clearly
+DT <- tt + rnorm(n = N, mean = 0, sd = 20)
+
+plot(x = as.ts(DT), main = "Deterministic Trend", ylab = "y_t", lwd = 2)
+```
+
+Perform ADF and KPSS tests:
+
+```{r ADF and KPSS tests for model with DT}
+DT %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
+
+DT %>% urca::ur.kpss(type = "tau", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test was rejected (there is no unit root) and the null hypothesis of the KPSS test cannot be rejected (stationary with deterministic trend).
+
+### 3.4 Random Walk with Drift and Deterministic Trend
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## References
+
+https://www.real-statistics.com/time-series-analysis/stochastic-processes/random-walk/
+
+https://www.investopedia.com/articles/trading/07/stationary.asp#:~:text=Random%20Walk%20with%20Drift%20and,trend%2C%20and%20a%20stochastic%20component.
+
+https://financetrain.com/simulate-random-walk-rw-in-r
+
+https://kevinkotze.github.io/ts-6-unit-roots/
+
