@@ -54,7 +54,7 @@ M = list(order = c(0, 1, 0))
 set.seed(123)
 
 RW <- stats::arima.sim(model = M, n = N)
-
+                       
 # Plot RW
 plot(x = RW, main = "Random Walk", ylab = "y_t", lwd = 2)
 ```
@@ -102,7 +102,7 @@ legend(x = "topleft", legend = c("RW with positive drift", "RW with negative dri
        col = c("black", "red"), lwd = 2)
 ```
 
-Perform ADF and KPSS tests for just the RW model with positive constant:
+Perform ADF and KPSS tests for the RW model with positive constant:
 
 ```{r ADF and KPSS tests for RW with drift}
 RW_posDrift %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
@@ -114,22 +114,22 @@ The null hypothesis of the ADF test cannot be rejected (there is unit root) and 
 
 ### 3.3 Deterministic Trend
 
-A simple model with a deterministic trend represented by $y_t = t \alpha + \varepsilon_t$, where $\varepsilon_t \sim N(0, \sigma^2)$, is different from stochastic trend processes such as the RW model with and without drift. This model is non-stationary because a time component is involved, causing $E(y_t) = t \alpha$ such that the mean is time-dependent. By removing the time trend (de-trending), the series would be stationary since $\varepsilon_t$ is a white noise process.
+A simple model with a deterministic trend represented by $y_t = \delta t + \varepsilon_t$, where $\varepsilon_t \sim N(0, \sigma^2)$, is different from stochastic trend processes such as the RW model with and without drift. This model is non-stationary because a time component is involved, with $E(y_t) = \delta t$ such that the mean is time-dependent. By removing the time trend (de-trending), the series would be stationary since $\varepsilon_t$ is a white noise process.
 
 When plotted, values still vary up and down but returns to the trend, without ever drifting off from the trend permanently.
 
 To simulate a model with deterministic trend, a time trend needs to be created:
 
 ```{r simulate simple model with deterministic trend}
-# Use same number of observations as RW model
-tt <- 1:N
+# Use same number of observations as RW model, observation begans from time 0
+tt <- 0:N
 
 set.seed(345)
 
 # Set sd = 20 so that the ups and downs can be seen clearly
-DT <- tt + rnorm(n = N, mean = 0, sd = 20)
+DT <- as.ts(tt + rnorm(n = N, mean = 0, sd = 10))
 
-plot(x = as.ts(DT), main = "Deterministic Trend", ylab = "y_t", lwd = 2)
+plot(x = DT, main = "Deterministic Trend", ylab = "y_t", lwd = 2)
 ```
 
 Perform ADF and KPSS tests:
@@ -144,10 +144,246 @@ The null hypothesis of the ADF test was rejected (there is no unit root) and the
 
 ### 3.4 Random Walk with Drift and Deterministic Trend
 
+Lastly, we can have a non-stationary process combining both deterministic and stochastic trend terms. A simple example of this process is a random walk with drift and deterministic trend with the form $y_t = \alpha_0 + \delta t + y_{t-1} + \varepsilon_t$, where $\varepsilon_t \sim N(0, \sigma^2)$. Recursively expanding the lags of $y_t$ in the equation yields $y_t = t \alpha_0 + \delta (t + (t-1) + (t-2) + \dotsc + 3 + 2 + 1) + y_0 + \sum_{s=1}^t \varepsilon_s$. The expected mean is then $E(y_t) = t \alpha_0 + \delta \bigg( \frac{t(t+1)}{2} \bigg) + y_0$ and the variance is $V(y_t) = t \sigma^2$. Both the mean and variance depends on time.
 
+Simulating a random walk with drift and deterministic trend requires a time trend and a RW model with drift:
 
+```{r simulate RW with drift and DT}
+# Create simulated model by adding time trend (tt) to RW_posDrift
+RW_posDrift_DT <- tt + RW_posDrift
 
+plot(x = RW_posDrift_DT, main = "Random Walk with Drift and Deterministic Trend", ylab = "y_t", lwd = 2)
+```
 
+Perform ADF and KPSS tests:
+
+```{r ADF and KPSS tests for RW with drift and DT}
+RW_posDrift_DT %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
+
+RW_posDrift_DT %>% urca::ur.kpss(type = "tau", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test cannot be rejected (there is unit root) and the null hypothesis of the KPSS test was rejected (not stationary).
+
+### 3.5 Summary
+
+Plot the RW, RW with positive drift, deterministic trend and RW with positive drift and deterministic trend:
+
+```{r plot models in same chart}
+plot(cbind(RW, RW_posDrift, DT, RW_posDrift_DT),
+     main = "Non-Stationary Processes", ylab = "y_t", 
+     plot.type = "single", 
+     col = c("black", "red", "blue", "green"), lwd = 2)
+
+legend(x = "topleft",
+       legend = c("RW", "RW with positive drift", "Deterministic trend", "RW with positive drift and deterministic trend"), 
+       col = c("black", "red", "blue", "green"), lwd = 2)
+```
+
+The ADF and KPSS tests were conducted for each model and only the model with deterministic trend was stationary after accounting for the time trend in the tests (so it is a trend stationary process). In the next section, I discussed how non-stationary processes can be made stationary by differencing, de-trending or both.
+
+## 4 Transform Non-Stationary to Stationary Processes
+
+In this section, I discussed how each of the non-stationary processes can be made stationary, in order of their presentation in Section 3.
+
+### 4.1 Differencing
+
+Time series with a stochastic trend, such as the RW with and without drift, can be transformed into a stationary process by taking differences. Based on the RW equation in Section 3.1, subtracting $y_{t-1}$ from both sides of the equation would yield:
+
+$$y_t - y_{t-1} = y_{t-1} - y_{t-1} + \varepsilon_t \\ \Delta y_t = \varepsilon_t$$
+
+Since $\varepsilon_t$ is a white noise process, the RW model is stationary after taking the first difference. Such variables are integrated of order one or $I(1)$. If a variable is not stationary after taking the first difference, but stationary after the second difference, it is an $I(2)$ variable and so on.
+
+Taking the first difference of RW and RW with drift:
+
+```{r differencing RW and RW with drift}
+RW_diff <- diff(x = RW, lag = 1, differences = 1)
+
+RWdrift_diff <- diff(x = RW_posDrift, lag = 1, differences = 1)
+
+plot(x = cbind(RW_diff, RWdrift_diff), 
+     main = "First-Differenced Random Walk with and without Drift", 
+     ylab = "y_t", plot.type = "single",
+     col = c("black", "red"), lwd = 2)
+
+legend(x = "topleft", 
+       legend = c("Differenced RW", "Differenced RW with drift"), 
+       col = c("black", "red"), lwd = 2)
+```
+
+Perform ADF and KPSS tests on differenced RW:
+
+```{r ADF and KPSS test of differenced RW}
+RW_diff %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+RW_diff %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test was rejected (no unit root) and the null hypothesis of the KPSS test cannot be rejected (stationary). The test results would be the same for the differenced RW with drift.
+
+### 4.2 De-trending
+
+For time series variables with a deterministic trend, assumptions are needed for the time trend on whether it might be linear, exponential, or quadratic. Remove the time trend and the variable would be stationary. Based on the model with deterministic trend in Section 3.3, suppose we know the true data generating process, we can simply subtract a linear time trend from the equation, therefore leaving us with a stochastic white noise process:
+
+$$y_t - \delta t = \varepsilon_t$$
+
+Another way is to regress $y_t$ on a time trend and obtain the residuals (or subtract fitted $y_t$ from actual $y_t$), which should be a white noise process.
+
+Plot time trend with the model before and after removing the deterministic trend:
+
+```{r removing time trend from model}
+DT_detrend <- DT - tt
+
+plot(x = cbind(DT, tt, DT_detrend), 
+     main = "Before and After Detrending", ylab = "y_t",
+     plot.type = "single",
+     col = c("black", "red", "blue"), lwd = 2)
+
+legend(x = "topleft", legend = c("Deterministic trend", "Time Trend", "Detrend"),
+       col = c("black", "red", "blue"), lwd = 2)
+```
+
+Perform ADF and KPSS tests on model after de-trending:
+
+```{r ADF and KPSS tests on model after de-trending}
+DT_detrend %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+DT_detrend %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test was rejected (no unit root) and the null hypothesis of the KPSS test cannot be rejected (stationary).
+
+### 4.3 Differencing a Trend Stationary Variable
+
+Suppose that we subtracted the previous value of $y$ from its current value, where $y_{t-1} = \delta (t-1) + \varepsilon_{t-1}$. This would transform the trend stationary equation to $\Delta y_t = \delta + \Delta \varepsilon_{t-1}$. Although $\varepsilon_t$ is a stochastic white noise process, the transformed variable $\Delta \varepsilon_t = \varepsilon_t - \varepsilon_{t-1}$ introduces a problem. The shock at time $t$ does not only affect the current $y$ value but also the $y$ value next period and might not disappear as time passes.
+
+Take first difference on model with deterministic trend:
+
+```{r difference model with DT once}
+DT_diff <- diff(x = DT, lag = 1, differences = 1)
+
+# Remove first row of DT_detrend as differencing causes us to lose one observation
+plot(x = cbind(DT_detrend[-1], DT_diff), 
+     main = "De-trending vs Differencing of Deterministic Trend Process",
+     plot.type = "single",
+     col = c("black", "red"), lwd = c(2, 1), lty = c(1, 2))
+
+legend(x = "topleft",
+       legend = c("De-trended", "Differenced"),
+       col = c("black", "red"), lwd = c(2, 1), lty = c(1, 2))
+```
+
+Perform ADF and KPSS tests for differenced variable with deterministic trend:
+
+```{r ADF and KPSS tests for DT_diff}
+DT_diff %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+DT_diff %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+The ADF and KPSS tests show that the differenced model with a deterministic trend is still stationary and has no unit root, but the standard deviation of the differenced variable is greater than the de-trended variable.
+
+### 4.4 Combining De-trending and Differencing
+
+For variables with a stochastic and deterministic trend, differencing is required to remove the stochastic trend and regressing the differenced variable on a time trend to obtain the residuals, which removes the deterministic trend.
+
+With the RW with drift and deterministic trend in Section 3.4, we can first obtain the residual from regressing $\Delta y_t$ on $t$ and a constant, which removes the deterministic trend, then subtract $y_{t-1}$ to remove the stochastic trend, leaving behind the white noise process.
+
+Transform RW with drift and deterministic trend into a stationary variable:
+
+```{r stationarity of RW with drift and DT}
+reg_y <- lm(formula = RW_posDrift_DT ~ tt)
+
+delta_y <- diff(x = residuals(reg_y), lag = 1, differences = 1)
+
+# Remove first observation from residuals as differencing causes one observation to be lost
+plot(cbind(as.ts(residuals(reg_y)[-1]), delta_y),
+     main = "De-trending Only and With Differencing",
+     plot.type = "single",
+     col = c("black", "red"), lwd = 2)
+
+legend(x = "topleft",
+       legend = c("After De-trending", "After De-trending and Differencing"),
+       col = c("black", "red"), lwd = 2)
+```
+
+Perform ADF and KPSS tests on de-trended and differenced variable:
+
+```{r ADF and KPSS tests for DT_diff}
+delta_y %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+delta_y %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+The null hypothesis of the ADF test was rejected (no unit root) and the null hypothesis of the KPSS test cannot be rejected (stationary). In fact, the test statistics would be the same as the test for the differenced RW with positive drift, since the underlying data generating process is simply an addition of a time trend to the RW with positive drift.
+
+## 5 Impact on Forecasting
+
+In Section 4, methods to transform non-stationary process into stationary process were shown. In this section, I used a slightly more complex model involving ARIMA with deterministic and stochastic trends and see how the methods to achieve stationarity affect forecasting accuracy.
+
+### 5.1 Simulate ARIMA Model
+
+I simulated a simple ARIMA(2, 1, 1) model with a quadratic time trend:
+
+```{r simulate ARIMA with quadratic time trend}
+# Number of observations
+N = 200
+
+# Model to simulate, need to include coefficients of AR and MA terms
+M = list(order = c(2, 1, 1), ar = c(0.85, -0.43), ma = -0.21)
+
+set.seed(456)
+
+stoch_proc <- stats::arima.sim(model = M, n = N, mean = 0.5, sd = 5)
+
+t <- 0:N
+
+y <- stoch_proc + 1.85 * t - 0.004 * t^2
+
+plot(y, main = "Simulated ARIMA(2,1,1) with Quadratic Time Trend", lwd = 2)
+```
+
+```{r ADF and KPSS tests for y}
+y %>% urca::ur.df(type = "trend", selectlags = "AIC") %>% summary()
+
+y %>% urca::ur.kpss(type = "tau", lags = "short") %>% summary()
+```
+
+The null hypothesis for the ADF test cannot be rejected (there is unit root) and the null hypothesis for the KPSS test was rejected (not stationary).
+
+### 5.2 Simple Differencing
+
+One method would be to simply take the first difference on the trending variable.
+
+```{r simple differencing of y}
+simp_diff <- diff(x = y, lag = 1, differences = 1)
+
+simp_diff %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+
+simp_diff %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
+
+Variable is stationary and has no unit root based on the ADF and KPSS tests.
+
+### 5.3 Fit Trend and Use First Difference
+
+In this method, I attempted to fit $y$ on $t$, $t^2$ and both to see which trend fits the data better.
+
+```{r find trend}
+linear_trend <- lm(y ~ t)
+
+quad_trend <- lm(y ~ I(t^2))
+
+both <- lm(y ~ t + I(t^2))
+
+plot(cbind(y, fitted(linear_trend), fitted(quad_trend), fitted(both)), 
+     main = "Actual Values and Different Trends", 
+     col = c("black", "red", "blue", "green"), lwd = 2)
+
+legend(x = "topleft",
+       legend = c("Actual", "Linear trend", "Quadratic trend", "RW with positive drift and deterministic trend"), 
+       col = c("black", "red", "blue", "green"), lwd = 2)
+```
 
 
 
