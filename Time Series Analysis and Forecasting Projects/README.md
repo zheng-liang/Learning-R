@@ -31,3 +31,15 @@ does affect Singapore CPI using ARIMA, SARIMA, ARIMAX and SARIMAX models. I used
 SARIMA and SARIMAX or added seasonal dummies as external regressors.  
 
 Click the link to access the rendered HTML file: https://tinyurl.com/36jjkyna
+
+### 4 Non-Stationary Processes in Time Series Analysis
+
+This project sought to understand non-stationary processes in time series analysis and the difference between deterministic 
+and stochastic trend. It also finds out if differencing and de-trending to transform non-stationary variables into stationary
+processes affects the accuracy of out-of-sample forecast for time series with a deterministic trend.  
+
+The project used a simulation of random walk and ARIMA models and added a drift and/or trend term to simulate non-stationary 
+time series data.  
+
+Click the link to access the rendered HTML file: https://tinyurl.com/4dps5cfd
+
