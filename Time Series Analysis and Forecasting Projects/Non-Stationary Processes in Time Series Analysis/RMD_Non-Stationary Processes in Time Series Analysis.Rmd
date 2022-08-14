@@ -9,6 +9,7 @@ output:
     code_folding: show
     highlight: tango
     theme: flatly
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -56,7 +57,7 @@ set.seed(123)
 RW <- stats::arima.sim(model = M, n = N)
                        
 # Plot RW
-plot(x = RW, main = "Random Walk", ylab = "y_t", lwd = 2)
+plot(x = RW, main = "Random Walk", ylab = "y", lwd = 2)
 ```
 
 Using **`urca::ur.df()`** and **`urca::ur.kpss`**, the Augmented Dickey Fuller test for unit root and KPSS test for stationarity can be performed:
@@ -94,7 +95,7 @@ RW_negDrift <- stats::arima.sim(model = M, n = N, mean = -0.5, sd = 10)
 
 # Plot RW with drift
 plot(x = cbind(RW_posDrift, RW_negDrift), 
-     main = "Random Walk with Drift", ylab = "y_t", 
+     main = "Random Walk with Drift", ylab = "y", 
      plot.type = "single", 
      col = c("black", "red"), lwd = 2)
 
@@ -129,7 +130,7 @@ set.seed(345)
 # Set sd = 20 so that the ups and downs can be seen clearly
 DT <- as.ts(tt + rnorm(n = N, mean = 0, sd = 10))
 
-plot(x = DT, main = "Deterministic Trend", ylab = "y_t", lwd = 2)
+plot(x = DT, main = "Deterministic Trend", ylab = "y", lwd = 2)
 ```
 
 Perform ADF and KPSS tests:
@@ -152,7 +153,7 @@ Simulating a random walk with drift and deterministic trend requires a time tren
 # Create simulated model by adding time trend (tt) to RW_posDrift
 RW_posDrift_DT <- tt + RW_posDrift
 
-plot(x = RW_posDrift_DT, main = "Random Walk with Drift and Deterministic Trend", ylab = "y_t", lwd = 2)
+plot(x = RW_posDrift_DT, main = "Random Walk with Drift and Deterministic Trend", ylab = "y", lwd = 2)
 ```
 
 Perform ADF and KPSS tests:
@@ -171,7 +172,7 @@ Plot the RW, RW with positive drift, deterministic trend and RW with positive dr
 
 ```{r plot models in same chart}
 plot(cbind(RW, RW_posDrift, DT, RW_posDrift_DT),
-     main = "Non-Stationary Processes", ylab = "y_t", 
+     main = "Non-Stationary Processes", ylab = "y", 
      plot.type = "single", 
      col = c("black", "red", "blue", "green"), lwd = 2)
 
@@ -182,7 +183,7 @@ legend(x = "topleft",
 
 The ADF and KPSS tests were conducted for each model and only the model with deterministic trend was stationary after accounting for the time trend in the tests (so it is a trend stationary process). In the next section, I discussed how non-stationary processes can be made stationary by differencing, de-trending or both.
 
-## 4 Transform Non-Stationary to Stationary Processes
+## 4 Transform Non-Stationary to Stationary Processes {.tabset .tabset-pills}
 
 In this section, I discussed how each of the non-stationary processes can be made stationary, in order of their presentation in Section 3.
 
@@ -203,7 +204,7 @@ RWdrift_diff <- diff(x = RW_posDrift, lag = 1, differences = 1)
 
 plot(x = cbind(RW_diff, RWdrift_diff), 
      main = "First-Differenced Random Walk with and without Drift", 
-     ylab = "y_t", plot.type = "single",
+     ylab = "Differenced y", plot.type = "single",
      col = c("black", "red"), lwd = 2)
 
 legend(x = "topleft", 
@@ -235,7 +236,7 @@ Plot time trend with the model before and after removing the deterministic trend
 DT_detrend <- DT - tt
 
 plot(x = cbind(DT, tt, DT_detrend), 
-     main = "Before and After Detrending", ylab = "y_t",
+     main = "Before and After Detrending", ylab = "y",
      plot.type = "single",
      col = c("black", "red", "blue"), lwd = 2)
 
@@ -264,7 +265,7 @@ DT_diff <- diff(x = DT, lag = 1, differences = 1)
 
 # Remove first row of DT_detrend as differencing causes us to lose one observation
 plot(x = cbind(DT_detrend[-1], DT_diff), 
-     main = "De-trending vs Differencing of Deterministic Trend Process",
+     main = "De-trending vs Differencing of Deterministic Trend Process", ylab = "",
      plot.type = "single",
      col = c("black", "red"), lwd = c(2, 1), lty = c(1, 2))
 
@@ -298,18 +299,18 @@ delta_y <- diff(x = residuals(reg_y), lag = 1, differences = 1)
 
 # Remove first observation from residuals as differencing causes one observation to be lost
 plot(cbind(as.ts(residuals(reg_y)[-1]), delta_y),
-     main = "De-trending Only and With Differencing",
+     main = "De-trending Only and With Differencing", ylab = "",
      plot.type = "single",
      col = c("black", "red"), lwd = 2)
 
-legend(x = "topleft",
+legend(x = "top",
        legend = c("After De-trending", "After De-trending and Differencing"),
        col = c("black", "red"), lwd = 2)
 ```
 
 Perform ADF and KPSS tests on de-trended and differenced variable:
 
-```{r ADF and KPSS tests for DT_diff}
+```{r ADF and KPSS tests for delta_y}
 delta_y %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
 
 delta_y %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
@@ -317,7 +318,7 @@ delta_y %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
 
 The null hypothesis of the ADF test was rejected (no unit root) and the null hypothesis of the KPSS test cannot be rejected (stationary). In fact, the test statistics would be the same as the test for the differenced RW with positive drift, since the underlying data generating process is simply an addition of a time trend to the RW with positive drift.
 
-## 5 Impact on Forecasting
+## 5 Impact on Forecasting {.tabset .tabset-pills}
 
 In Section 4, methods to transform non-stationary process into stationary process were shown. In this section, I used a slightly more complex model involving ARIMA with deterministic and stochastic trends and see how the methods to achieve stationarity affect forecasting accuracy.
 
@@ -327,18 +328,18 @@ I simulated a simple ARIMA(2, 1, 1) model with a quadratic time trend:
 
 ```{r simulate ARIMA with quadratic time trend}
 # Number of observations
-N = 200
+N = 300
 
 # Model to simulate, need to include coefficients of AR and MA terms
-M = list(order = c(2, 1, 1), ar = c(0.85, -0.43), ma = -0.21)
+M = list(order = c(2, 1, 1), ar = c(1.02, -0.43), ma = -0.41)
 
 set.seed(456)
 
-stoch_proc <- stats::arima.sim(model = M, n = N, mean = 0.5, sd = 5)
+stoch_proc <- stats::arima.sim(model = M, n = N, mean = 0.23, sd = 3)
 
-t <- 0:N
+t <- as.ts(0:N)
 
-y <- stoch_proc + 1.85 * t - 0.004 * t^2
+y <- stoch_proc + 1.39 * t - 0.0027 * t^2
 
 plot(y, main = "Simulated ARIMA(2,1,1) with Quadratic Time Trend", lwd = 2)
 ```
@@ -351,56 +352,165 @@ y %>% urca::ur.kpss(type = "tau", lags = "short") %>% summary()
 
 The null hypothesis for the ADF test cannot be rejected (there is unit root) and the null hypothesis for the KPSS test was rejected (not stationary).
 
-### 5.2 Simple Differencing
+### 5.2 Model Estimation
 
-One method would be to simply take the first difference on the trending variable.
+I attempted to estimate the data as though the true data generating process had not been known. The **`forecast::auto.arima()`** allows level data to be inputted and differencing to be done internally by the function. The only thing then is to decide if a trend is required and if a differencing is needed afterwards.
 
-```{r simple differencing of y}
-simp_diff <- diff(x = y, lag = 1, differences = 1)
+Firstly, I split the data into training and testing sets.
 
-simp_diff %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
+```{r split training and testing set}
+train_y <- as.ts(y[0:281])
+train_t <- as.ts(t[0:281])
 
-simp_diff %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+test_y <- ts(data = y[282:301], start = 282)
+test_t <- ts(data = t[282:301], start = 282)
 ```
 
-Variable is stationary and has no unit root based on the ADF and KPSS tests.
+Secondly, determine if a fitting a trend is sufficient to obtain residuals with a white noise process.
 
-### 5.3 Fit Trend and Use First Difference
+```{r plot trends}
+linear_trend <- lm(train_y ~ train_t)
 
-In this method, I attempted to fit $y$ on $t$, $t^2$ and both to see which trend fits the data better.
+quad_trend <- lm(train_y ~ train_t + I(train_t^2))
 
-```{r find trend}
-linear_trend <- lm(y ~ t)
-
-quad_trend <- lm(y ~ I(t^2))
-
-both <- lm(y ~ t + I(t^2))
-
-plot(cbind(y, fitted(linear_trend), fitted(quad_trend), fitted(both)), 
-     main = "Actual Values and Different Trends", 
-     col = c("black", "red", "blue", "green"), lwd = 2)
+plot(cbind(train_y, fitted(linear_trend), fitted(quad_trend)),
+     main = "Actual Training Data and Fitted Trend", ylab = "y",
+     plot.type = "single",
+     col = c("black", "red", "blue"), lwd = 2)
 
 legend(x = "topleft",
-       legend = c("Actual", "Linear trend", "Quadratic trend", "RW with positive drift and deterministic trend"), 
-       col = c("black", "red", "blue", "green"), lwd = 2)
+       legend = c("Actual", "Linear trend", "Quadratic trend"),
+       col = c("black", "red", "blue"), lwd = 2)
 ```
 
+We can see that the quadratic trend fits the data better, although it is suggesting that a downturn is forming. The residuals from the `quad_trend` model is plotted, along with the residuals of `linear_trend` for comparison:
 
+```{r residual of quad_trend}
+plot(as.ts(cbind(residuals(quad_trend), residuals(linear_trend))),
+     main = "Residuals from Linear Trend and Quadratic Trend", ylab = "",
+     plot.type = "single",
+     col = c("black", "red"), lwd = 2)
 
+legend(x = "topleft",
+       legend = c("Residuals quad_trend", "Residuals linear_trend"),
+       col = c("black", "red"), lwd = 2)
+```
 
+Perform ADF and KPSS test on residuals of `quad_trend`:
 
+```{r ADF and KPSS tests for residuals}
+residuals(quad_trend) %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
 
+residuals(quad_trend) %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
+```
 
+The null hypothesis of the ADF test was rejected (there is no unit root) and the null hypothesis of the KPSS test cannot be rejected (stationary). However, it does not seem like a white noise process, thus differencing may be required after de-trending.
 
+Estimate an ARIMA model using only differencing of the level data:
 
+```{r estimate ARIMA with only differencing}
+# Restrict AR and MA terms to maximum of 4 lags
+model1 <- forecast::auto.arima(y = train_y, ic = "aic",
+                               seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
+
+model1
+```
+
+An ARIMA(3,1,2) model with drift was estimated when the training data was simply differenced.
+
+Estimate an ARIMA model, adding quadratic trend as external regressor:
+
+```{r estimate ARIMA with xreg quad trend}
+model2 <- forecast::auto.arima(y = train_y, ic = "aic",
+                               xreg = cbind(train_t, train_t^2),
+                               seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
+
+model2
+```
+
+By adding the time trend, an ARIMA(3,0,2) model was estimated, and no differencing was done since the data was stationary after de-trending as the ADF and KPSS tests have shown earlier.
+
+Estimate an ARIMA model, adding quadratic trend as external regressor and explicitly include differencing:
+
+```{r estimate model2 with differencing included}
+model3 <- forecast::auto.arima(y = train_y, ic = "aic", d = 1,
+                               xreg = cbind(train_t, train_t^2),
+                               seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
+
+model3
+```
+
+By including differencing to `model2`, an ARIMA(2,1,3) model was estimated.
+
+### 5.3 Forecast and Evaluation
+
+I forecasted the three models estimated in Section 5.2 for the next 20 periods:
+
+```{r forecast of models}
+f_model1 <- forecast::forecast(object = model1, h = 20, level = 95)
+
+f_model2 <- forecast::forecast(object = model2, h = 20, level = 95, xreg = cbind(test_t, test_t^2))
+
+f_model3 <- forecast::forecast(object = model3, h = 20, level = 95, xreg = cbind(test_t, test_t^2))
+```
+
+Plot the `f_model1` against the actual value and calculate accuracy measures of forecast:
+
+```{r plot f_model1 against actual value and accuracy}
+plot(cbind(y, f_model1$mean, f_model1$lower, f_model1$upper),
+     main = "Actual and Forecasted Values of model1", ylab = "y",
+     plot.type = "single",
+     col = c("black", "red", "gray", "gray"), lwd = 2)
+
+legend(x = "topleft",
+       legend = c("Actual", "Forecasted", "Lower and Upper Interval"),
+       col = c("black", "red", "gray"), lwd = 2)
+
+data.frame(forecast::accuracy(object = f_model1, x = test_y))
+```
+
+Plot the `f_model2` against the actual value and calculate accuracy measures of forecast:
+
+```{r plot f_model2 against actual value and accuracy}
+plot(cbind(y, f_model2$mean, f_model2$lower, f_model2$upper),
+     main = "Actual and Forecasted Values of model2", ylab = "y",
+     plot.type = "single",
+     col = c("black", "red", "gray", "gray"), lwd = 2)
+
+legend(x = "topleft",
+       legend = c("Actual", "Forecasted", "Lower and Upper Interval"),
+       col = c("black", "red", "gray"), lwd = 2)
+
+data.frame(forecast::accuracy(object = f_model2, x = test_y))
+```
+
+Plot the `f_model3` against the actual value and calculate accuracy measures of forecast:
+
+```{r plot f_model3 against actual value and accuracy}
+plot(cbind(y, f_model3$mean, f_model3$lower, f_model3$upper),
+     main = "Actual and Forecasted Values of model3", ylab = "y",
+     plot.type = "single",
+     col = c("black", "red", "gray", "gray"), lwd = 2)
+
+legend(x = "topleft",
+       legend = c("Actual", "Forecasted", "Lower and Upper Interval"),
+       col = c("black", "red", "gray"), lwd = 2)
+
+data.frame(forecast::accuracy(object = f_model3, x = test_y))
+```
+
+Based on the accuracy measures (from the `Test set` rows), `model3` had better forecasting performance than `model1` or `model2`. Including the trend in model estimation was able to improve forecasts of variables with deterministic trend. However, estimating the trend can be difficult at times. For example, if the fitted quadratic trend predicted an inflection point has occurred even though the variable would continue to be on an upward trend for a period in the future, the forecasts would be impacted and would probably show a down trend. 
+
+## 6 Final Remarks
+
+This project used simulations of random walk models to determine and visualize the difference between deterministic and stochastic trends. An ARIMA model with deterministic and stochastic trend was simulated to see if including the trend into model estimation could improve forecasts. This are simple examples, but real-world data is much more complicated, with changing relationships between variables due to exogenous factors or shocks. In such cases, periodic re-estimation of the model with rolling windows may improve model estimation and forecasts, which I would test in another project.
 
 ## References
 
-https://www.real-statistics.com/time-series-analysis/stochastic-processes/random-walk/
+Iordanova, T. (2022). *An Introduction to Non-Stationary Processes*. Investopedia. Retrieved 3 August 2022, from https://www.investopedia.com/articles/trading/07/stationary.asp#:~:text=Random%20Walk%20with%20Drift%20and,trend%2C%20and%20a%20stochastic%20component
 
-https://www.investopedia.com/articles/trading/07/stationary.asp#:~:text=Random%20Walk%20with%20Drift%20and,trend%2C%20and%20a%20stochastic%20component.
+Kotzé, K. *Nonstationarity*. kevinkotze.github.io. Retrieved 3 August 2022, from https://kevinkotze.github.io/ts-6-unit-roots/
 
-https://financetrain.com/simulate-random-walk-rw-in-r
+*Simulate Random Walk (RW) in R*. Finance Train. Retrieved 1 August 2022, from https://financetrain.com/simulate-random-walk-rw-in-r
 
-https://kevinkotze.github.io/ts-6-unit-roots/
-
+Zaiontz, C. *Random Walk*. Real Statistics Using Excel. Retrieved 2 August 2022, from https://www.real-statistics.com/time-series-analysis/stochastic-processes/random-walk/
