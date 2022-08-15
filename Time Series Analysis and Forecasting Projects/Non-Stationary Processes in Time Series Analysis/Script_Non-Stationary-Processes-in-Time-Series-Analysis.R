@@ -222,7 +222,6 @@ residuals(quad_trend) %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% su
 residuals(quad_trend) %>% urca::ur.kpss(type = "mu", lags = "short") %>% summary()
 
 ## ----estimate ARIMA with only differencing------------------------------------
-# Restrict AR and MA terms to maximum of 4 lags
 model1 <- forecast::auto.arima(y = train_y, ic = "aic",
                                seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
 

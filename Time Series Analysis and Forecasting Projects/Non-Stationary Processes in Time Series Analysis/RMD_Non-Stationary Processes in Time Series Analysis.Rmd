@@ -383,7 +383,7 @@ legend(x = "topleft",
        col = c("black", "red", "blue"), lwd = 2)
 ```
 
-We can see that the quadratic trend fits the data better, although it is suggesting that a downturn is forming. The residuals from the `quad_trend` model is plotted, along with the residuals of `linear_trend` for comparison:
+We can see that the quadratic trend seem to fit the data better. The residuals from the `quad_trend` model is plotted, along with the residuals of `linear_trend` for comparison:
 
 ```{r residual of quad_trend}
 plot(as.ts(cbind(residuals(quad_trend), residuals(linear_trend))),
@@ -409,7 +409,6 @@ The null hypothesis of the ADF test was rejected (there is no unit root) and the
 Estimate an ARIMA model using only differencing of the level data:
 
 ```{r estimate ARIMA with only differencing}
-# Restrict AR and MA terms to maximum of 4 lags
 model1 <- forecast::auto.arima(y = train_y, ic = "aic",
                                seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
 
@@ -499,7 +498,7 @@ legend(x = "topleft",
 data.frame(forecast::accuracy(object = f_model3, x = test_y))
 ```
 
-Based on the accuracy measures (from the `Test set` rows), `model3` had better forecasting performance than `model1` or `model2`. Including the trend in model estimation was able to improve forecasts of variables with deterministic trend. However, estimating the trend can be difficult at times. For example, if the fitted quadratic trend predicted an inflection point has occurred even though the variable would continue to be on an upward trend for a period in the future, the forecasts would be impacted and would probably show a down trend. 
+Based on the accuracy measures (from the `Test set` rows), `model3` had better forecasting performance than `model1` and `model2`. Including the trend in model estimation was able to improve forecasts of variables with deterministic trend. However, estimating the trend can be difficult at times. For example, if the fitted quadratic trend predicted an inflection point has occurred even though the variable would continue to be on an upward trend for a period in the future, the forecasts would be impacted and would probably show a down trend. 
 
 ## 6 Final Remarks
 
