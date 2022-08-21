@@ -21,7 +21,7 @@ knitr::knit_hooks$set(purl = knitr::hook_purl)
 
 In this project, my intention is to find out if using median returns in portfolio optimization could lead to better portfolio performance compared to mean returns. The use of mean returns might not accurately describe expected returns due to the non-normal distribution of financial returns. The mean is also known to be affected by outliers, whereas the median tend to be a more robust measure of central tendency. 
 
-The results of this project found that using the median return to find the optimal portfolio did not lead to significant improvement in portfolio performance than using the mean return. However, this should not be taken as evidence against the median return as the project was flawed in its own ways. Firstly, the portfolios optimized only used a selected number of stocks, which means that the results are not generalizable to any portfolio. Secondly, the number of random portfolios used to simulate the performance of hypothetical portfolios was only a small a small subset of an large possible set of permutations, decreasing the likelihood of finding the true optimal portfolio.
+The results of this project found that using the median return to find the optimal portfolio did not lead to significant improvement in portfolio performance than using the mean return. However, this should not be taken as evidence against the median return as the project was flawed in its own ways. Firstly, the portfolios optimized only used a selected number of stocks, which means that the results are not generalizable to any portfolio. Secondly, the number of random portfolios used to simulate the performance of hypothetical portfolios was only a small subset of a large possible set of permutations, decreasing the likelihood of finding the true optimal portfolio.
 
 ## 2 Packages Required
 
@@ -770,7 +770,7 @@ Looking at the annualized performance, the portfolios optimized using median ret
 
 Looking at the table of downside risk measures, the median portfolios generally had higher maximum drawdowns and historical expected shortfall than the mean portfolios.
 
-The median portfolios generally did not out-performed the mean portfolios based on the sample of random hypothetical portfolios generated for this project.
+The median portfolios did not out-performed the mean portfolios based on the sample of random hypothetical portfolios generated for this project.
 
 ## 9 Conclusion
 
