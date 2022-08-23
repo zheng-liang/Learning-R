@@ -154,24 +154,24 @@ for (s in 1:10) {
   portspecs[[s]] <- PortfolioAnalytics::portfolio.spec(assets = names(stock_returns[[s]]))
   
   # Sum of weights constrained to 1, can also specify as type = "full investment"
-  portspecs[[s]] <- add.constraint(portspecs[[s]], 
-                                       type = "weight_sum",
-                                       min_sum= 1, max_sum = 1)
+  portspecs[[s]] <- PortfolioAnalytics::add.constraint(portspecs[[s]], 
+                                                       type = "weight_sum",
+                                                       min_sum= 1, max_sum = 1)
 
   # Weight constraint on each stock, max is 15% of portfolio
-  portspecs[[s]] <- add.constraint(portspecs[[s]], 
-                                       type="box", 
-                                       min=0, max=0.15)
+  portspecs[[s]] <- PortfolioAnalytics::add.constraint(portspecs[[s]], 
+                                                       type="box", 
+                                                       min=0, max=0.15)
   
   # Objective to minimize risk based on variance (function will default to standard deviation as measure of risk)
-  portspecs[[s]] <- add.objective(portspecs[[s]],
-                                      type = "risk",
-                                      name = "var")
+  portspecs[[s]] <- PortfolioAnalytics::add.objective(portspecs[[s]],
+                                                      type = "risk",
+                                                      name = "var")
   
   # Adding a return objective, thus we maximize mean return per unit of risk
-  portspecs[[s]] <- add.objective(portspecs[[s]],
-                                      type = "return",
-                                      name = "mean")
+  portspecs[[s]] <- PortfolioAnalytics::add.objective(portspecs[[s]],
+                                                      type = "return",
+                                                      name = "mean")
   
   # Add name to specification to distinguish them
   names(portspecs)[s] <- paste("P", s, "_spec", sep = "")
@@ -415,7 +415,7 @@ table.CAPM(Ra = cbind(port_returns, active_returns), Rb = index_returns$SPY, sca
 table.DownsideRisk(R = cbind(port_returns, active_returns), scale = 252, Rf = 0.025/252, MAR = 0.07/252, digits = 4)
 ```
 
-The benchmark returns (Rb) in **`table.CAPM`** used SPY returns to give a comparison of the alpha and beta of the portfolios and actively-managed ETFs. Again, Portfolio 2 had the highest annualized return and Sharpe Ratio and the lowest maximum drawdown. The ARK ETFs would have outperformed Portfolio 2 if an investor bought at the start of 2015 and sold in early 2021 at its peak. 
+The benchmark returns (Rb) in **`table.CAPM()`** used SPY returns to give a comparison of the alpha and beta of the portfolios and actively-managed ETFs. Again, Portfolio 2 had the highest annualized return and Sharpe Ratio and the lowest maximum drawdown. The ARK ETFs would have outperformed Portfolio 2 if an investor bought at the start of 2015 and sold in early 2021 at its peak. 
 
 ## 7 Final Remarks
 
@@ -425,4 +425,4 @@ Some caveats about this experiment:
 2. I had assumed that the 15 stocks sampled for each portfolio would not be swapped for other stocks within the experiment period.
 3. I had assumed zero transaction costs.
 
-I would like to stress that this project was mainly carried out as a fun/thought experiment. It was not meant to disprove the expertise of active managers, the strategies employed by these funds for stock selection or the power of investing into an index ETF. From the results of this simple experiment, only 1 portfolio out of 10 (Portfolio 2) managed to achieve greater cumulative returns over the years than the rest of the pack. There would be an incredible amount of luck involved (if it can be quantified) to select 15 stocks from the S&P500 universe of stocks that can provide such returns. if they were to be chosen at random.
+I would like to stress that this project was mainly carried out as a fun/thought experiment. It was not meant to disprove the expertise of active managers, the strategies employed by these funds for stock selection or the power of investing into an index ETF. From the results of this simple experiment, only 1 portfolio out of 10 (Portfolio 2) managed to achieve greater cumulative returns over the years than the rest of the pack. There would be an incredible amount of luck involved to select 15 stocks from the S&P500 universe of stocks that can provide such returns, if they were to be chosen at random.

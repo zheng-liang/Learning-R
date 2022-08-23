@@ -99,24 +99,24 @@ for (s in 1:10) {
   portspecs[[s]] <- PortfolioAnalytics::portfolio.spec(assets = names(stock_returns[[s]]))
   
   # Sum of weights constrained to 1, can also specify as type = "full investment"
-  portspecs[[s]] <- add.constraint(portspecs[[s]], 
-                                       type = "weight_sum",
-                                       min_sum= 1, max_sum = 1)
+  portspecs[[s]] <- PortfolioAnalytics::add.constraint(portspecs[[s]], 
+                                                       type = "weight_sum",
+                                                       min_sum= 1, max_sum = 1)
 
   # Weight constraint on each stock, max is 15% of portfolio
-  portspecs[[s]] <- add.constraint(portspecs[[s]], 
-                                       type="box", 
-                                       min=0, max=0.15)
+  portspecs[[s]] <- PortfolioAnalytics::add.constraint(portspecs[[s]], 
+                                                       type="box", 
+                                                       min=0, max=0.15)
   
   # Objective to minimize risk based on variance (function will default to standard deviation as measure of risk)
-  portspecs[[s]] <- add.objective(portspecs[[s]],
-                                      type = "risk",
-                                      name = "var")
+  portspecs[[s]] <- PortfolioAnalytics::add.objective(portspecs[[s]],
+                                                      type = "risk",
+                                                      name = "var")
   
   # Adding a return objective, thus we maximize mean return per unit of risk
-  portspecs[[s]] <- add.objective(portspecs[[s]],
-                                      type = "return",
-                                      name = "mean")
+  portspecs[[s]] <- PortfolioAnalytics::add.objective(portspecs[[s]],
+                                                      type = "return",
+                                                      name = "mean")
   
   # Add name to specification to distinguish them
   names(portspecs)[s] <- paste("P", s, "_spec", sep = "")
