@@ -1,0 +1,272 @@
+---
+title: "Estimating Volatility of Stock Returns Using GARCH Models Part 2"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
+    code_folding: show
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+The purpose of this project was to learn about Generalized Autoregressive Conditional Heteroskedasticity (GARCH) models and how to implement them in R to measure volatility of stock returns. It introduces the packages in R that is used for building GARCH models and briefly touches on basic n-ahead forecasting to evaluate the models' out-of-sample forecast performance.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(dplyr)
+library(forecast) # For ARIMA models, forecasting and evaluation
+library(PerformanceAnalytics) # For portfolio performance and risk analysis
+library(PortfolioAnalytics) # For portfolio optimization and analysis
+library(quantmod) # For obtaining historical prices from Yahoo Finance
+library(rugarch) # For univariate GARCH models
+library(urca) # For unit root tests
+```
+
+### 4.3 Glosten-Jagannathan-Runkle GARCH Models {.tabset}
+
+GJR-GARCH models can capture the asymmetric patterns in volatility due to positive and negative shocks (such as bad/good financial results, etc.). The volatility asymmetry is not captured by the standard GARCH models. We write the GJR-GARCH(1, 1) as:
+
+$$\sigma_t^2 = \omega + \alpha_1 \varepsilon_{t-1}^2 + \gamma_1 \varepsilon_{t-1}^2 I_{t-1} + \beta_1 \sigma_{t-1}^2$$
+
+$I_{t-1} = 0$ if $\varepsilon_{t-1}^2 \ge 0$ and $I_{t-1} = 1$ if $\varepsilon_{t-1}^2 < 0$. The inclusion of the dummy variable $I_{t-1}$ simply means that we expect higher volatility in the current period, if there was a negative shock in the previous period.
+
+#### 4.3.1 GJR-GARCH(1, 1) Model
+
+Create a GJR-GARCH(1, 1) model specification with normally distributed errors:
+
+```{r GJR-GARCH(1,1) with normal distribution}
+# Specify GJR-GARCH(1,1) model 
+gjrmodel <- list(model = "gjrGARCH", garchOrder = c(1, 1))
+
+# Assume a normal distribution of the error term z_t
+gjrspec <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "norm")
+
+# Fit GARCH(1, 1)
+fitGJR11 <- rugarch::ugarchfit(spec = gjrspec, data = trainset, solver = "hybrid")
+
+fitGJR11
+```
+
+With the GJR-GARCH(1, 1) with normally distributed errors, none of the coefficients in the models are significant. This might hint at a mis-specification of models. Let's try the assumption of t-distribution and skewed t-distribution.
+
+#### 4.3.2 GJR-GARCH(1, 1) Model with t-Distribution
+
+```{r GJR-GARCH(1,1) with t-distribution}
+# Assume Student's t-distribution of error term z_t
+gjrspec_std <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "std")
+
+# Fit GARCH(1, 1)
+fitGJR11_std <- rugarch::ugarchfit(spec = gjrspec_std, data = trainset, solver = "hybrid")
+
+fitGJR11_std
+```
+
+#### 4.3.3 GJR-GARCH(1, 1) Model with Skewed t-Distribution
+
+```{r GJR-GARCH(1,1) with skewed t-distribution}
+# Assume skewed t-distribution of error term z_t
+gjrspec_sstd <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "sstd")
+
+# Fit GARCH(1, 1)
+fitGJR11_sstd <- rugarch::ugarchfit(spec = gjrspec_sstd, data = trainset, solver = "hybrid")
+
+fitGJR11_sstd
+```
+
+With the t-distribution and skewed t-distribution assumption, only the coefficient of $\varepsilon_{t-1}^2$ is insignificant and $\gamma_1$ is insignificant when using robust errors.
+
+#### 4.3.4 Plots of GJR-GARCH(1, 1) Model
+
+```{r plot GJR-GARCH(1,1) with t-distribution, fig.align='center'}
+# Plot some data from the GJR-GARCH(1, 1) with t-distribution
+
+par(mfrow = c(2, 2))
+
+for (i in plotnum) {
+  plot(fitGJR11_std, which = i)
+}
+```
+
+### 4.4 Exponential GARCH Models {.tabset}
+
+EGARCH models, similar to GJR-GARCH models, resolves the asymmetric patterns of volatility to positive and negative shocks. An EGARCH(1, 1) model is written as:
+
+$$\ln(\sigma_t^2) = \omega + \bigg[ \alpha_1 z_{t-1} + \gamma_1 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg) \bigg] + \beta_1 \ln(\sigma_{t-1}^2)$$
+
+$\gamma_1$ is the coefficient of the EGARCH term $\gamma_1 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg)$. If negative shocks cause higher volatility than positive shocks, then $\alpha_1$ should be negative. This is because, if $z_{t-1} \ge 0$, we would have $(-\alpha_1 + \gamma_1)z_{t-1} - \gamma_1 E(|z_{t-1}|)$ and if $z_{t-1} < 0$, we would have $(\alpha_1 + \gamma_1)z_{t-1} - \gamma_1 E(|z_{t-1}|)$, which creates higher conditional volatility when there is a negative shock.
+
+#### 4.4.1 EGARCH(1, 1) Model
+
+Create an EGARCH(1, 1) model specification with normally distributed errors:
+
+```{r EGARCH(1,1) with normal distribution}
+# Specify EGARCH(1,1) model 
+egarchmodel <- list(model = "eGARCH", garchOrder = c(1, 1))
+
+# Assume a normal distribution of the error term z_t
+egarchspec <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "norm")
+
+# Fit GARCH(1, 1)
+fitEGARCH11 <- rugarch::ugarchfit(spec = egarchspec, data = trainset, solver = "hybrid")
+
+fitEGARCH11
+```
+
+Based on the output, we can write the formula as:
+
+$$\hat{r}_t = 0.535 + \hat{\sigma}_t \hat{z}_t \\ \ln(\hat{\sigma}_t^2) = 1.045 - 0.275z_{t-1} + 0.163 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg) + 0.587 \ln(\sigma_{t-1}^2)$$
+
+All the coefficients are significant, standardized residuals are not serially correlated and ARCH effects have been sufficiently captured. I have also estimated the EGARCH with assumed t-distribution and skewed t-distribution of errors.
+
+#### 4.4.2 EGARCH(1, 1) Model with t-Distribution
+
+```{r EGARCH(1,1) with t-distribution}
+# Assume a t-distribution of the error term z_t
+egarchspec_std <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "std")
+
+# Fit GARCH(1, 1)
+fitEGARCH11_std <- rugarch::ugarchfit(spec = egarchspec_std, data = trainset, solver = "hybrid")
+
+fitEGARCH11_std
+```
+
+#### 4.4.3 EGARCH(1, 1) Model with Skewed t-Distribution
+
+```{r EGARCH(1,1) with skewed t-distribution}
+# Assume a skewed t-distribution of the error term z_t
+egarchspec_sstd <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "sstd")
+
+# Fit GARCH(1, 1)
+fitEGARCH11_sstd <- rugarch::ugarchfit(spec = egarchspec_sstd, data = trainset, solver = "hybrid")
+
+fitEGARCH11_sstd
+```
+
+#### 4.4.4 Plots of EGARCH(1, 1) Model
+
+```{r plot EGARCH(1,1) with t-distribution, fig.align='center'}
+# Plot some data from the EGARCH(1, 1) with t-distribution
+
+par(mfrow = c(2, 2))
+
+for (i in plotnum) {
+  plot(fitEGARCH11_std, which = i)
+}
+```
+
+### 4.5 Summary
+
+In this section, I have estimated 4 different models, with 3 different assumed distribution of the error $z_t$. I have created a table comparing their AIC values below.
+
+| Models          | Normal Distribution | t-Distribution | Skewed t-Distribution |
+|:----------------|:-------------------:|:--------------:|:---------------------:|
+| ARCH(2)         | 5.397               | 5.366          | 5.367                 |
+| GARCH(1, 1)     | 5.409               | 5.367          | 5.366                 |
+| GJR-GARCH(1, 1) | 5.373               | 5.343          | 5.341                 |
+| EGARCH(1, 1)    | 5.371               | 5.344          | 5.343                 |
+
+Despite the rather low AIC values of the GJR models, the $\gamma$ coefficient for the $\varepsilon_{t-1}^2 I_{t-1}$ term was insignificant when looking at the robust errors. However, I would still consider this model in the forecast evaluation in the next section.
+
+
+
+
+
+
+### 5.3 GJR-GARCH Forecasts
+
+```{r forecast GJR-GARCH(1,1) models}
+# Forecast GJR-GARCH(1, 1) with normal distribution of innovations 8 periods ahead
+fcstGJR11_nd <- rugarch::ugarchforecast(fitORspec = fitGJR11, n.ahead = 8)
+
+# Forecast GJR-GARCH(1, 1) with t-distribution of innovations 8 periods ahead
+fcstGJR11_std <- rugarch::ugarchforecast(fitORspec = fitGJR11_std, n.ahead = 8)
+
+# Forecast GJR-GARCH(1, 1) with t-distribution of innovations 8 periods ahead
+fcstGJR11_sstd <- rugarch::ugarchforecast(fitORspec = fitGJR11_sstd, n.ahead = 8)
+```
+
+Store forecasted conditional standard deviation of GJR-GARCH models into a data frame:
+
+```{r store forecast of GJR-GARCH}
+fcstGJR11 <- cbind(sigma(fcstGJR11_nd), sigma(fcstGJR11_std), sigma(fcstGJR11_sstd)) %>%
+  `colnames<-`(c("GJR11_ND", "GJR11_STD", "GJR11_SSTD"))
+
+fcstGJR11
+```
+
+Calculate evaluation metrics for each GJR-GARCH model:
+
+```{r evaluation metrics for GJR-GARCH(1,1) models}
+evalGJR <- NULL
+
+for (i in 1:3) {
+  mse <- mean((proxy$Volatility^2 - fcstGJR11[,i]^2)^2)
+  
+  rmse <- sqrt(mse)
+  
+  mae <- mean(abs(proxy$Volatility^2 - fcstGJR11[,i]^2))
+  
+  evalGJR <- rbind(evalGJR, c(MSE = mse, RMSE = rmse, MAE= mae))
+}
+
+rownames(evalGJR) <- colnames(fcstGJR11)
+
+evalGJR
+```
+
+### 5.4 EGARCH Forecasts
+
+```{r forecast EGARCH(1,1) models}
+# Forecast EGARCH(1, 1) with normal distribution of innovations 8 periods ahead
+fcstEGARCH11_nd <- rugarch::ugarchforecast(fitORspec = fitEGARCH11, n.ahead = 8)
+
+# Forecast EGARCH(1, 1) with t-distribution of innovations 8 periods ahead
+fcstEGARCH11_std <- rugarch::ugarchforecast(fitORspec = fitEGARCH11_std, n.ahead = 8)
+
+# Forecast EGARCH(1, 1) with t-distribution of innovations 8 periods ahead
+fcstEGARCH11_sstd <- rugarch::ugarchforecast(fitORspec = fitEGARCH11_sstd, n.ahead = 8)
+```
+
+Store forecasted conditional standard deviation of EGARCH models into a data frame:
+
+```{r store forecast of EGARCH}
+fcstEGARCH11 <- cbind(sigma(fcstEGARCH11_nd), sigma(fcstEGARCH11_std), sigma(fcstEGARCH11_sstd)) %>%
+  `colnames<-`(c("EGARCH11_ND", "EGARCH11_STD", "EGARCH11_SSTD"))
+
+fcstEGARCH11
+```
+
+Calculate evaluation metrics for each EGARCH model:
+
+```{r evaluation metrics for EGARCH(1,1) models}
+evalEGARCH <- NULL
+
+for (i in 1:3) {
+  mse <- mean((proxy$Volatility^2 - fcstEGARCH11[,i]^2)^2)
+  
+  rmse <- sqrt(mse)
+  
+  mae <- mean(abs(proxy$Volatility^2 - fcstEGARCH11[,i]^2))
+  
+  evalEGARCH <- rbind(evalEGARCH, c(MSE = mse, RMSE = rmse, MAE= mae))
+}
+
+rownames(evalEGARCH) <- colnames(fcstEGARCH11)
+
+evalEGARCH
+```
+
+
+
+

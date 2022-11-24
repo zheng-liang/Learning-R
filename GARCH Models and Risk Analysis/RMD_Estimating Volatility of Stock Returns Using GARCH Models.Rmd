@@ -1,7 +1,7 @@
 ---
 title: "Estimating Volatility of Stock Returns Using GARCH Models"
 author: "Tan Zheng Liang"
-date: "2022-07-16"
+date: "`r Sys.Date()`"
 output: 
   html_document: 
     toc: yes
@@ -17,11 +17,9 @@ knitr::opts_chunk$set(fig.align="center")
 knitr::knit_hooks$set(purl = knitr::hook_purl)
 ```
 
-Updated on: `r Sys.Date()`
-
 ## 1 Introduction
 
-The purpose of this project was to learn about Generalized Autoregressive Conditional Heteroskedasticity (GARCH) models and how to implement them in R to measure volatility of stock returns. It introduces the packages in R that is used for building GARCH models and briefly touches on basic n-ahead forecasting to evaluate the models' out-of-sample forecast performance.
+The purpose of this project was to learn about Generalized Auto-Regressive Conditional Heteroskedasticity (GARCH) models and how to implement them in R to measure volatility of stock returns. It introduces the packages in R that is used for building GARCH models and briefly touches on basic n-ahead forecasting to evaluate the models' out-of-sample forecast performance.
 
 ## 2 Packages Required
 
@@ -39,79 +37,73 @@ library(urca) # For unit root tests
 
 ### 3.1 Data and Plots
 
-In typical time series analysis, we usually require that the time series data is stationary with a constant mean and constant variance. However, we may have stationarity with changing conditional variance (conditional heteroskedasticity), commonly seen in financial data. In such data, the plots would show periods of volatility clustering, where there are periods of high and low volatility and variance is not constant in these periods. For instance, let us take a look at the weekly returns of Apple Inc. (AAPL), which we will be using for the rest of this project.
+In typical time series analysis, we usually require that the time series data is stationary with a constant mean and constant variance. However, we may have stationarity with changing conditional variance (conditional heteroskedasticity), commonly seen in financial data. In such data, the plots would show periods of volatility clustering, where there are periods of high and low volatility and variance is not constant in these periods. For instance, let us take a look at the daily returns of the SPDR S&P 500 ETF Trust (ticker: SPY), which we will be using for the rest of this project.
 
-```{r load AAPL price data}
-# Load AAPL price data from Yahoo Finance using quantmod package
+```{r load SPY price data}
+# Load SPY price data from Yahoo Finance using quantmod package
 
 # Set start and end dates for data retrieval
-startdate <- as.Date("2010-01-01")
+startdate <- as.Date("2020-01-01")
 enddate <- as.Date("2022-07-01")
 
 # Retrieve price data
-AAPL_price <- quantmod::getSymbols(Symbols = "AAPL", 
-                                   src = "yahoo", 
-                                   from = startdate, to = enddate, 
-                                   periodicity = "weekly", 
-                                   auto.assign = F)
+spy <- quantmod::getSymbols(Symbols = "SPY",
+                            src = "yahoo",
+                            from = startdate, to = enddate,
+                            periodicity = "daily",
+                            auto.assign = F)
 
-# View the first and last 6 observations in AAPL_price
-c(head(AAPL_price), tail(AAPL_price))
+# View the first and last 4 observations
+data.frame(c(head(spy, n = 4), tail(spy, n = 4)))
 
 # Check number of observations
-nrow(AAPL_price)
+nrow(spy)
 
 # Check for missing data
-colSums(is.na(AAPL_price))
+colSums(is.na(spy))
 ```
 
 ```{r calculate log returns}
 # Calculate log/continuous returns using Adjusted column (column 6)
 
 # Remove first row of calculated returns since returns cannot be calculated for first observation
-rAAPL <- PerformanceAnalytics::Return.calculate(prices = AAPL_price[, 6], method = "log")[-1,] * 100
-colnames(rAAPL) <- "Returns"
+r_spy <- PerformanceAnalytics::Return.calculate(prices = spy[, 6], method = "log")[-1,]
+colnames(r_spy) <- "Log Returns"
 
 # Check that first row has been removed
-head(rAAPL)
-nrow(rAAPL)
+head(r_spy)
+nrow(r_spy)
 
 # Chart weekly log-returns over time
-plot.zoo(rAAPL, main = "Weekly Log-Returns of AAPL", xlab = "Time", ylab = "Log-Return (in %)")
+plot.zoo(r_spy, main = "Daily Log-Returns of AAPL", xlab = "Time", ylab = "Log-Return")
 ```
 
-If we were to only look at the period in early 2020 (COVID-19 outbreak), we see that there is a period where large absolute returns are followed by large absolute returns, which then starts to return to "normal". I charted the monthly volatilty (measured using annualized standard deviation) of `rAAPL` to better present the fluctuations in returns that might not be easily seen in the weekly returns plot.
+If we were to only look at the period in early 2020 (COVID-19 outbreak), we see that there is a period where large absolute returns are followed by large absolute returns, and subsequently there is a period of low absolute returns followed by low absolute returns. I charted the monthly volatility (measured using annualized standard deviation) of `r_spy` to better present the fluctuations in returns that might not be easily seen in the daily returns plot.
 
-```{r rolling volatility of AAPL returns}
-# Plot rolling volatility of AAPL returns
+```{r rolling volatility of SPY returns}
+# Plot rolling volatility of SPY returns
 
-# width = 4 to approximately calculate annualized sd using a monthly rolling-window
-PerformanceAnalytics::chart.RollingPerformance(R = rAAPL, width = 4, FUN = "sd.annualized", scale = 52, main = "1-Month Rolling Volatility of AAPL Returns")
+# width = 22 to approximately calculate annualized sd using a monthly rolling-window
+PerformanceAnalytics::chart.RollingPerformance(R = r_spy, width = 22, FUN = "sd.annualized", scale = 252, main = "1-Month Rolling Volatility of SPY Returns")
 ```
 
 ### 3.2 Unit Root and Stationarity Tests
 
-We can check if the series is stationary using an Augmented Dickey Fuller Test and Kwiatkowski-Phillips-Schmidt-Shin Test.
+We can check if the series is stationary using an Augmented Dickey Fuller Test, where the null hypothesis is that the time series has a unit root.
 
 ```{r ADF test on AAPL returns}
-# ADF Test with Drift, lags selected based on AIC
+# ADF Test with , lags selected based on AIC
 
-rAAPL %>% urca::ur.df(type = "drift", selectlags = "AIC") %>% summary()
-
-# KPSS Test
-
-rAAPL %>% urca::ur.kpss(type = "mu", lags = "long") %>% summary()
+r_spy %>% urca::ur.df(type = "none", selectlags = "AIC") %>% summary()
 ```
 
-The test-statistic value of `tau2` -17.95 against the critical value of -2.86 at the 5% significance level means that we can reject the null hypothesis (alternative hypothesis is that the time series does not have unit root). The KPSS test-statistic 0.052 against the 5% critical value of 0.46 means that we cannot reject the null hypothesis (alternative hypothesis that the time series is not stationary).
+The test-statistic value of -17.04 against the critical value of -1.95 at the 5% significance level means that we can reject the null hypothesis.
 
-Despite varying variances at different periods, the ADF and KPSS tests shows that the series is stationary. The problem of conditional heteroskedasticity is not addressed in ARIMA and other models that assumed constant variance. We can use GARCH models to estimate this volatility to better manage risk and improve forecasts of returns. Before discussing GARCH, it may be helpful to talk about the ARCH model since GARCH was an improvement of it.
+Despite varying variances at different periods, the ADF and KPSS tests shows that the series is stationary. The problem of conditional heteroskedasticity is not addressed in ARIMA and other models that assumed constant variance. We can use GARCH models to estimate this volatility to better manage risk and improve forecasts of returns. Before discussing GARCH, it may be helpful to talk about the ARCH model since GARCH builds upon it.
 
-## 4 Understanding GARCH Models {.tabset .tabset-pills}
+## 4.1 ARCH Models {.tabset .tabset-pills}
 
-### 4.1 ARCH Models {.tabset}
-
-ARCH or AutoRegressive Conditional Heteroskedasticity models can be thought of as an Autoregressive model. Suppose that the returns was modelled as such (remains true for all the GARCH models):
+ARCH or Auto-Regressive Conditional Heteroskedasticity models can be thought of as an autoregressive model. Suppose that the returns at time $t$ was modeled as such (remains true for all the GARCH models):
 
 $$r_t = \mu + \varepsilon_t$$
 
@@ -119,56 +111,55 @@ where $\mu$ can be a constant or represented with ARMA models, and $\varepsilon_
 
 In most cases, $z_t$ is assumed to have a normal distribution, but with the fat tails and slight skew that is typical of financial returns, it is also possible to use a Student's t-distribution or a skewed t-distribution.
 
-```{r distribution of AAPL returns}
-# Plot distribution of AAPL's weekly log returns
+```{r distribution of SPY returns}
+# Plot distribution of SPY daily log returns
 
-PerformanceAnalytics::chart.Histogram(R = rAAPL,
-                                      main = "Distribution of AAPL Weekly Log-Returns", 
+PerformanceAnalytics::chart.Histogram(R = r_spy,
+                                      main = "Distribution of SPY Daily Log-Returns", 
                                       methods = c("add.density", "add.normal"), 
-                                      colorset = c("blue", "red", "black"),
-                                      ylim = c(0, 0.15))
+                                      colorset = c("blue", "red", "black"))
 
-legend(x = "topleft", legend = c("Log-Return", "Density", "Normal"), col = c("blue", "red", "black"), lty = 1)
+legend(x = "topleft", legend = c("Log-Return", "Density", "Normal"), col = c("blue", "red", "black"), lty = 2)
 ```
 
-```{r descriptive stats of AAPL returns}
-# Look at skewness and kurtosis of AAPL returns
+```{r descriptive stats of SPY returns}
+# Look at skewness and kurtosis of SPY returns
 
-PerformanceAnalytics::table.Distributions(R = rAAPL)
+PerformanceAnalytics::table.Distributions(R = r_spy)
 ```
 
 An ARCH(1) model is then formulated as:
 
 $$Var(\varepsilon_t) = \sigma_t^2 = \omega + \alpha_1 \varepsilon^2_{t-1}$$
 
-What the formula essentially say is that the conditional variance in the current period ($\sigma_t^2$) is affected by the errors in the previous period. $\alpha_0 > 0$ since variance of first period should also be non-negative and $\alpha_1 > 0$ so that larger error terms in the previous period means higher conditional variance but $\alpha_1 < 1$ to prevent "explosive" variance. This can be extended to an ARCH(q) model where we have $q$ lags of error terms.
+What the formula essentially means is that the conditional variance in the current period ($\sigma_t^2$) is affected by the errors in the previous period. $\omega > 0$ since variance of first period should also be non-negative and $\alpha_1 > 0$ so that larger error terms in the previous period means higher conditional variance but $\alpha_1 < 1$ to prevent "explosive" variance. This can be extended to an ARCH(q) model where we have $q$ lags of error terms.
 
-Moving forward, I would estimate the models using returns data up to end-April 2022 and use the data in May and June 2022 to evaluate the models.
+Moving forward, I would estimate the models using data up to 15 June 2022 and use the rest of the data to evaluate the models.
 
 ```{r split data}
 # Split the data for training and testing models
-trainset <- rAAPL["/2022-04",]
+trainset <- r_spy["/2022-06-15",]
 nrow(trainset)
 
-testset <- rAAPL["2022-05/",]
+testset <- r_spy["2022-06-16/",]
 nrow(testset)
 ```
 
-#### 4.1.1 ARCH(1) Model
+### 4.1.1 ARCH(1) Model
 
 I used an ARMA model to estimate the mean equation before generating the ARCH model.
 
 ```{r estimate mean equation using ARMA model}
-# Find mean equation using auto.arima from forecast package
+# Try a simple ARMA model with max 1 lags of AR and MA each
 
 meaneqn <- forecast::auto.arima(y = trainset, 
-                                max.p = 2, max.q = 2, 
+                                max.p = 1, max.q = 1, 
                                 stepwise = F, approximation = F, trace = F, 
-                                ic = "aic", method = "ML")
+                                ic = "aic")
 summary(meaneqn)
 ```
 
-Based on the ARMA output, a ARMA(0, 0) with non-zero mean has the lowest AIC. With this, we can create the model specification for the ARCH model using **`ugarchspec`**.
+Based on the output, ARMA(4, 1) with zero mean (the intercept) was chosen. With this, we can create the model specification for the ARCH model using **`ugarchspec`**.
 
 ```{r create ARCH(1) model specification}
 # Create ARCH(1) model specification using rugarch package, arguments to be in a list
@@ -178,79 +169,64 @@ Based on the ARMA output, a ARMA(0, 0) with non-zero mean has the lowest AIC. Wi
 archmodel <- list(model = "sGARCH", garchOrder = c(1, 0))
 
 # Specify mean model as found using auto.arima
-meanmodel <- list(armaOrder = c(0, 0), include.mean = T)
+meanmodel <- list(armaOrder = c(1, 1), include.mean = F)
 
-# Assume a normal distribution of the error term z_t
-archspec <- rugarch::ugarchspec(variance.model = archmodel, mean.model = meanmodel, distribution.model = "norm")
+# Assume that the shocks, z_t, is normally distributed
+arch_spec <- rugarch::ugarchspec(variance.model = archmodel, mean.model = meanmodel, distribution.model = "norm")
 ```
 
 ```{r fit ARCH(1) model with normal distribution}
 # Fit the data to the ARCH(1) specification
 
-fitARCH <- rugarch::ugarchfit(spec = archspec, data = trainset, solver = "hybrid")
+fitARCH <- rugarch::ugarchfit(spec = arch_spec, data = trainset, solver = "hybrid")
 
 fitARCH
 ```
 
-The output is split into several tables. The first table `Optimal Parameters` gives us the coefficients, standard errors and significance for the mean and ARCH equations, as well as the robust errors. Using the values, we would write the equations:
+The output is split into several tables. The first table `Optimal Parameters` gives us the coefficients, standard errors and significance of the coefficients for the mean and ARCH equations, as well as the robust errors. Using the values, we would write the equations:
 
-$$\hat{r}_t = 0.519 + \hat{\varepsilon}_t \\ \widehat{Var(\varepsilon_t)} = \hat{\sigma}_t^2 = 12.007 + 0.108 \varepsilon_{t-1}^2$$
+$$\hat{r}_t = -0.61r_{t-1} + 0.49\varepsilon_{t-1}\\ \widehat{Var(\varepsilon_t)} = \hat{\sigma}_t^2 = 0.0001 + 0.67\varepsilon_{t-1}^2$$
 
-However, coefficient for $\varepsilon_{t-1}^2$ is insignificant at the 5% significance level. The second table `Information Criteria` shows the different information criteria values, which can be compared across models to check which fits the data better. The third table `Weighted Ljung-Box Test on Standardized Residuals` shows results for serial correlation in the residuals and based on the test, the null hypothesis could not be rejected. The next table that interests us is the `Weighted ARCH LM Tests` and the low p-values means that we reject the null hypothesis (alternative is that there is ARCH effects). We may need to increase the order of ARCH terms to account for the rest of the ARCH effects. The last table `Adjusted Pearson Goodness-of-Fit Test` shows that the assumption of normally distributed errors cannot be rejected, but it is still good practice to try other distributions.
+The second table `Information Criteria` shows the different information criteria values, which can be compared across models to check which model fits the data better. The third table `Weighted Ljung-Box Test on Standardized Residuals` shows results for serial correlation in the residuals and based on the test, the null hypothesis was rejected at higher order of lags. The next table that interests us is the `Weighted ARCH LM Tests` and the low p-values means that we reject the null hypothesis (alternative is that there is ARCH effects). We may need to increase the order of ARCH terms to account for the rest of the ARCH effects. The last table `Adjusted Pearson Goodness-of-Fit Test` shows that the assumption of normally distributed errors was rejected, and we should try other distributions.
 
-#### 4.1.2 ARCH(2) Model
+### 4.1.2 ARCH(2) Model with t-Distribution
 
-I created an ARCH(p) model to account for remaining ARCH effects, still using the assumed normal distribution of errors.
+I created an ARCH(p) model to account for remaining ARCH effects and assumed that the shocks $z_t$ have a t-distribution.
 
 ```{r ARCH(2) model with normal distribution}
 # Specify an ARCH(2) model
 arch2model <- list(model = "sGARCH", garchOrder = c(2, 0))
 
 # Assume normal distribution of error term z_t
-arch2spec <- rugarch::ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "norm")
+arch2std_spec <- rugarch::ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "std")
 
-fitARCH2 <- ugarchfit(spec = arch2spec, data = trainset, solver = "hybrid")
+fitARCH2std <- ugarchfit(spec = arch2std_spec, data = trainset, solver = "hybrid")
 
-fitARCH2
+fitARCH2std
 ```
 
-ARCH LM Tests show that we cannot reject the null hypothesis, so we have sufficiently accounted for ARCH effects in the model.
+ARCH LM Tests show that we cannot reject the null hypothesis, so we have sufficiently accounted for ARCH effects in the model. Pearson Goodness-of-Fit Test shows that the assumption of t-distribution might be rejected. Next, we try a skewed Student's t-distribution.
 
-#### 4.1.3 ARCH(2) Model with t-Distribution
+### 4.1.3 ARCH(2) Model with Skewed t-Distribution
 
-I tried an ARCH(2) model with a Student's t-distribution to account for the fat-tailed distribution.
-
-```{r ARCH(2) model with t-distribution}
-# Assume a normal distribution of the error term z_t
-arch2spec_std <- rugarch::ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "std")
-
-fitARCH2_std <- ugarchfit(spec = arch2spec_std, data = trainset, solver = "hybrid")
-
-fitARCH2_std
-```
-
-With the t-distribution ARCH(2) model, the coefficient of $\varepsilon_{t-1}^2$ is still insignificant, but we have lower AIC.
-
-#### 4.1.4 ARCH(2) Model with Skewed t-Distribution
-
-Finally, I created an ARCH(2) model with a skewed t-distribution to account for the heavy tail and skewed distribution.
+I created an ARCH(2) model with a skewed t-distribution to account for the heavy tail and skewed distribution.
 
 ```{r ARCH(2) model with skewed t-distribution}
 # Use skewed t-distribution
 
-arch2spec_sstd <- ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "sstd")
+arch2sstd_spec <- ugarchspec(variance.model = arch2model, mean.model = meanmodel, distribution.model = "sstd")
 
-fitARCH2_sstd <- rugarch::ugarchfit(spec = arch2spec_sstd, data = trainset, solver = "hybrid")
+fitARCH2sstd <- rugarch::ugarchfit(spec = arch2sstd_spec, data = trainset)
 
-fitARCH2_sstd
+fitARCH2sstd
 ```
 
-The ARCH(2) with skewed t-distribution has slightly higher AIC than the ARCH(2) with t-distribution, but the skew coefficient is significant.
+The ARCH(2) with skewed t-distribution has slightly higher AIC than the ARCH(2) with t-distribution. Pearson Goodness-of-Fit Test indicated that the skewed t-distribution cannot be rejected as a good fit for the shocks.
 
-#### 4.1.5 Plots of ARCH(2) Model
+### 4.1.4 Plots of ARCH(2) Model
 
-```{r plot ARCH(2) with t-distribution, fig.align='center'}
-# Plot some data from the ARCH(2) with t-distribution
+```{r plot ARCH(2) with t-distribution}
+# Plot some data from the ARCH(2) with skewed t-distribution
 
 par(mfrow = c(2, 2))
 
@@ -262,243 +238,103 @@ par(mfrow = c(2, 2))
 plotnum <- c(1, 3, 8, 9)
 
 for (i in plotnum) {
-  plot(fitARCH2_std, which = i)
+  plot(fitARCH2sstd, which = i)
 }
 ```
 
-### 4.2 Standard GARCH Models {.tabset}
+## 4.2 Standard GARCH Models {.tabset .tabset-pills}
 
-In order to capture the effects of volatility clustering, an ARCH model with many lags may be required. To solve this issue, the standard Generalized ARCH (sGARCH) can be used. The model can be thought of as an Autoregressive Moving Average Model, and is the basic model of in the GARCH variation of models. A GARCH(1, 1) model can be written as:
+In order to capture the effects of volatility clustering, an ARCH model with many lags may be required. To solve this issue, the standard Generalized ARCH (sGARCH) can be used. The model can be thought of as an autoregressive moving average model, and is the basic model in the GARCH variation of models. A GARCH(1, 1) model can be written as:
 
 $$\sigma_t^2 = \alpha_0 + \alpha_1 \varepsilon_{t-1}^2 + \beta_1 \sigma_{t-1}^2 ~, \text{ where } \alpha_0,~ \alpha_1,~ \beta_1 > 0$$
 
 Essentially, the conditional variance in the current period is affected by the errors and the conditional variance in the previous period. Similar to ARCH, the model can be extended to a GARCH(p, q) model with $p$ lags of conditional variance and $q$ lags of error terms.
 
-#### 4.2.1 GARCH(1, 1) Model
+### 4.2.1 GARCH(1, 1) Model
 
-Create an GARCH(1, 1) model specification with normally distributed errors:
+Create an GARCH(1, 1) model specification with normally distributed $z_t$:
 
 ```{r GARCH(1,1) with normal distribution}
 # Specify GARCH(1,1) model 
 garchmodel <- list(model = "sGARCH", garchOrder = c(1, 1))
 
 # Assume a normal distribution of the error term z_t
-garchspec <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "norm")
+garch_spec <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "norm")
 
 # Fit GARCH(1, 1)
-fitGARCH11 <- rugarch::ugarchfit(spec = garchspec, data = trainset, solver = "hybrid")
+fitGARCH <- rugarch::ugarchfit(spec = garch_spec, data = trainset, solver = "hybrid")
 
-fitGARCH11
+fitGARCH
 ```
 
-With a GARCH(1, 1) model, the $\alpha_1$ is statistically significant, standardized residuals do not have serial correlation and there are no ARCH effects left after including the GARCH term. The Adjusted Pearson Goodness-of-Fit Test statistic also shows that we cannot reject that the errors follow a normal distribution. We can write the formula as:
+With a GARCH(1, 1) model, the coefficient of the GARCH term $\beta_1$ is statistically significant (but $\omega$ is insignificant at the 5% confidence level), standardized residuals are not serially correlated and there are no ARCH effects left after including the GARCH term. The Adjusted Pearson Goodness-of-Fit Test statistic indicates that the normal distribution is rejected again. We can write the formula as:
 
-$$\hat{r}_t = 0.605 + \hat{\sigma}_t \hat{z}_t \\ \widehat{Var(\varepsilon_t)} = \hat{\sigma}_t^2 = 3.732 + 0.109 \varepsilon_{t-1}^2 + 0.611 \sigma_{t-1}^2$$
+$$\hat{r}_t = -0.58r_{t-1} + 0.52\varepsilon_{t-1} \\ \widehat{Var(\varepsilon_t)} = \hat{\sigma}_t^2 = 0.25 \varepsilon_{t-1}^2 + 0.73 \sigma_{t-1}^2$$
 
-As per the ARCH models, I created GARCH(1, 1) with the assumption that errors follow a t-distribution and a skewed t-distribution.
+I have also estimated a GARCH(1, 1) with the assumption that $z_t$ follows a t-distribution and a skewed t-distribution.
 
-#### 4.2.2 GARCH(1, 1) Model with t-Distribution
+### 4.2.2 GARCH(1, 1) Model with t-Distribution
 
 ```{r GARCH(1,1) with t-distribution}
 # GARCH(1, 1) with errors that follow a t-distribution
 
-garchspec_std <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "std")
+garchstd_spec <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "std")
 
-fitGARCH11_std <- rugarch::ugarchfit(spec = garchspec_std, data = trainset, solver = "hybrid")
+fitGARCHstd <- rugarch::ugarchfit(spec = garchstd_spec, data = trainset, solver = "hybrid")
 
-fitGARCH11_std
+fitGARCHstd
 ```
 
-Using the t-distribution led to insignificant $\omega$ and $\alpha_1$.
+Pearson Goodness-of-Fit Test indicates again that the shocks may not follow a t-distribution.
 
-#### 4.2.3 GARCH(1, 1) Model with Skewed t-Distribution
+### 4.2.3 GARCH(1, 1) Model with Skewed t-Distribution
 
 ```{r GARCH(1,1) with skewed t-distribution}
 # GARCH(1, 1) with errors that follow a skewed t-distribution
 
-garchspec_sstd <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "sstd")
+garchsstd_spec <- rugarch::ugarchspec(variance.model = garchmodel, mean.model = meanmodel, distribution.model = "sstd")
 
-fitGARCH11_sstd <- rugarch::ugarchfit(spec = garchspec_sstd, data = trainset, solver = "hybrid")
+fitGARCHsstd <- rugarch::ugarchfit(spec = garchsstd_spec, data = trainset, solver = "hybrid")
 
-fitGARCH11_sstd
+fitGARCHsstd
 ```
 
-#### 4.2.4 Plots of GARCH(1, 1) Model
+Assuming that $z_t$ follows a skewed t-distribution results in serially correlated residuals.
 
-```{r plot GARCH(1,1) with t-distribution, fig.align='center'}
-# Plot some data from the GARCH(1, 1) with t-distribution
+### 4.2.4 Plots of GARCH(1, 1) Model
+
+```{r plot GARCH(1,1) with t-distribution}
+# Plot some data from the GARCH(1, 1) with skewed t-distribution
+# similar to what was done in the ARCH section
 
 par(mfrow = c(2, 2))
 
 for (i in plotnum) {
-  plot(fitGARCH11_std, which = i)
+  plot(fitGARCHsstd, which = i)
 }
 ```
-
-### 4.3 Glosten-Jagannathan-Runkle GARCH Models {.tabset}
-
-GJR-GARCH models can capture the asymmetric patterns in volatility due to positive and negative shocks (such as bad/good financial results, etc.). The volatility asymmetry is not captured by the standard GARCH models. We write the GJR-GARCH(1, 1) as:
-
-$$\sigma_t^2 = \omega + \alpha_1 \varepsilon_{t-1}^2 + \gamma_1 \varepsilon_{t-1}^2 I_{t-1} + \beta_1 \sigma_{t-1}^2$$
-
-$I_{t-1} = 0$ if $\varepsilon_{t-1}^2 \ge 0$ and $I_{t-1} = 1$ if $\varepsilon_{t-1}^2 < 0$. The inclusion of the dummy variable $I_{t-1}$ simply means that we expect higher volatility in the current period, if there was a negative shock in the previous period.
-
-#### 4.3.1 GJR-GARCH(1, 1) Model
-
-Create a GJR-GARCH(1, 1) model specification with normally distributed errors:
-
-```{r GJR-GARCH(1,1) with normal distribution}
-# Specify GJR-GARCH(1,1) model 
-gjrmodel <- list(model = "gjrGARCH", garchOrder = c(1, 1))
-
-# Assume a normal distribution of the error term z_t
-gjrspec <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "norm")
-
-# Fit GARCH(1, 1)
-fitGJR11 <- rugarch::ugarchfit(spec = gjrspec, data = trainset, solver = "hybrid")
-
-fitGJR11
-```
-
-With the GJR-GARCH(1, 1) with normally distributed errors, none of the coefficients in the models are significant. This might hint at a mis-specification of models. Let's try the assumption of t-distribution and skewed t-distribution.
-
-#### 4.3.2 GJR-GARCH(1, 1) Model with t-Distribution
-
-```{r GJR-GARCH(1,1) with t-distribution}
-# Assume Student's t-distribution of error term z_t
-gjrspec_std <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "std")
-
-# Fit GARCH(1, 1)
-fitGJR11_std <- rugarch::ugarchfit(spec = gjrspec_std, data = trainset, solver = "hybrid")
-
-fitGJR11_std
-```
-
-#### 4.3.3 GJR-GARCH(1, 1) Model with Skewed t-Distribution
-
-```{r GJR-GARCH(1,1) with skewed t-distribution}
-# Assume skewed t-distribution of error term z_t
-gjrspec_sstd <- rugarch::ugarchspec(variance.model = gjrmodel, mean.model = meanmodel, distribution.model = "sstd")
-
-# Fit GARCH(1, 1)
-fitGJR11_sstd <- rugarch::ugarchfit(spec = gjrspec_sstd, data = trainset, solver = "hybrid")
-
-fitGJR11_sstd
-```
-
-With the t-distribution and skewed t-distribution assumption, only the coefficient of $\varepsilon_{t-1}^2$ is insignificant and $\gamma_1$ is insignificant when using robust errors.
-
-#### 4.3.4 Plots of GJR-GARCH(1, 1) Model
-
-```{r plot GJR-GARCH(1,1) with t-distribution, fig.align='center'}
-# Plot some data from the GJR-GARCH(1, 1) with t-distribution
-
-par(mfrow = c(2, 2))
-
-for (i in plotnum) {
-  plot(fitGJR11_std, which = i)
-}
-```
-
-### 4.4 Exponential GARCH Models {.tabset}
-
-EGARCH models, similar to GJR-GARCH models, resolves the asymmetric patterns of volatility to positive and negative shocks. An EGARCH(1, 1) model is written as:
-
-$$\ln(\sigma_t^2) = \omega + \bigg[ \alpha_1 z_{t-1} + \gamma_1 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg) \bigg] + \beta_1 \ln(\sigma_{t-1}^2)$$
-
-$\gamma_1$ is the coefficient of the EGARCH term $\gamma_1 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg)$. If negative shocks cause higher volatility than positive shocks, then $\alpha_1$ should be negative. This is because, if $z_{t-1} \ge 0$, we would have $(-\alpha_1 + \gamma_1)z_{t-1} - \gamma_1 E(|z_{t-1}|)$ and if $z_{t-1} < 0$, we would have $(\alpha_1 + \gamma_1)z_{t-1} - \gamma_1 E(|z_{t-1}|)$, which creates higher conditional volatility when there is a negative shock.
-
-#### 4.4.1 EGARCH(1, 1) Model
-
-Create an EGARCH(1, 1) model specification with normally distributed errors:
-
-```{r EGARCH(1,1) with normal distribution}
-# Specify EGARCH(1,1) model 
-egarchmodel <- list(model = "eGARCH", garchOrder = c(1, 1))
-
-# Assume a normal distribution of the error term z_t
-egarchspec <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "norm")
-
-# Fit GARCH(1, 1)
-fitEGARCH11 <- rugarch::ugarchfit(spec = egarchspec, data = trainset, solver = "hybrid")
-
-fitEGARCH11
-```
-
-Based on the output, we can write the formula as:
-
-$$\hat{r}_t = 0.535 + \hat{\sigma}_t \hat{z}_t \\ \ln(\hat{\sigma}_t^2) = 1.045 - 0.275z_{t-1} + 0.163 \bigg( |z_{t-1}| - E|z_{t-1}| \bigg) + 0.587 \ln(\sigma_{t-1}^2)$$
-
-All the coefficients are significant, standardized residuals are not serially correlated and ARCH effects have been sufficiently captured. I have also estimated the EGARCH with assumed t-distribution and skewed t-distribution of errors.
-
-#### 4.4.2 EGARCH(1, 1) Model with t-Distribution
-
-```{r EGARCH(1,1) with t-distribution}
-# Assume a t-distribution of the error term z_t
-egarchspec_std <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "std")
-
-# Fit GARCH(1, 1)
-fitEGARCH11_std <- rugarch::ugarchfit(spec = egarchspec_std, data = trainset, solver = "hybrid")
-
-fitEGARCH11_std
-```
-
-#### 4.4.3 EGARCH(1, 1) Model with Skewed t-Distribution
-
-```{r EGARCH(1,1) with skewed t-distribution}
-# Assume a skewed t-distribution of the error term z_t
-egarchspec_sstd <- rugarch::ugarchspec(variance.model = egarchmodel, mean.model = meanmodel, distribution.model = "sstd")
-
-# Fit GARCH(1, 1)
-fitEGARCH11_sstd <- rugarch::ugarchfit(spec = egarchspec_sstd, data = trainset, solver = "hybrid")
-
-fitEGARCH11_sstd
-```
-
-#### 4.4.4 Plots of EGARCH(1, 1) Model
-
-```{r plot EGARCH(1,1) with t-distribution, fig.align='center'}
-# Plot some data from the EGARCH(1, 1) with t-distribution
-
-par(mfrow = c(2, 2))
-
-for (i in plotnum) {
-  plot(fitEGARCH11_std, which = i)
-}
-```
-
-### 4.5 Summary
-
-In this section, I have estimated 4 different models, with 3 different assumed distribution of the error $z_t$. I have created a table comparing their AIC values below.
-
-| Models          | Normal Distribution | t-Distribution | Skewed t-Distribution |
-|:----------------|:-------------------:|:--------------:|:---------------------:|
-| ARCH(2)         | 5.397               | 5.366          | 5.367                 |
-| GARCH(1, 1)     | 5.409               | 5.367          | 5.366                 |
-| GJR-GARCH(1, 1) | 5.373               | 5.343          | 5.341                 |
-| EGARCH(1, 1)    | 5.371               | 5.344          | 5.343                 |
-
-Despite the rather low AIC values of the GJR models, the $\gamma$ coefficient for the $\varepsilon_{t-1}^2 I_{t-1}$ term was insignificant when looking at the robust errors. However, I would still consider this model in the forecast evaluation in the next section.
 
 ## 5 Evaluating Forecast Performance {.tabset .tabset-pills}
 
-In this section, I evaluated the out-of-sample forecast performance of the 12 models created in Section 3. However, before jumping into the forecast, there is a need to highlight the difficulty of evaluating GARCH models. The difficulty lies in using an appropriate proxy of volatility, since it is not observable at a point in time. The paper by Wennström (2014) describes some proxies of volatility, such as squared returns, using moving averages of variance and cumulative squared intra-day returns. In the paper, and another by Schmidt (2021), the High-Low Range proxy was used and the formula is given by:
+In this section, I evaluated the out-of-sample forecast performance of the ARCH and GARCH models created in the previous sections. I only looked at the models that assumed $z_t$ follows the t- or skewed t-distribution for simplicity.
+
+However, before jumping into the forecast, there is a need to highlight the difficulty of evaluating GARCH models. The difficulty lies in using an appropriate proxy of volatility, since it is not observable at a point in time. The paper by Wennström (2014) describes some proxies of volatility, such as squared returns, using moving averages of variance and cumulative squared intra-day returns. In the paper, and another by Schmidt (2021), the High-Low Range proxy was used and a simple variation of the formula is given by:
 
 $$v_t = \ln \bigg( \frac{H_t}{L_t} \bigg)$$
 
-I extracted the weekly high and weekly low prices of AAPL of the test period and calculate the volatility proxy.
+I extracted the daily high and daily low prices of SPY in the test period and calculate the volatility proxy.
 
 ```{r high low price}
 # Extract high (column 2) and low (column 3) prices within test period
 
-proxy <- AAPL_price["2022-05/", 2:3]
+proxy <- spy["2022-06-16/", 2:3]
 
-proxy$Volatility <- log(proxy[, 1] / proxy[, 2]) * 100
+proxy$Volatility <- log(proxy[, 1] / proxy[, 2])
 
-proxy
+data.frame(proxy)
 ```
 
-In the following sub-sections, I evaluated the models against the volatility proxy using Mean Squared Error, Root Mean Squared Error and Mean Absolute Error, grouped by the model types (ARCH, GARCH, GJR and EGARCH). 
+In the following sub-sections, I evaluated the models against the volatility proxy using Mean Squared Error, Root Mean Squared Error and Mean Absolute Error, grouped by the model types.
 
 The formula for each evaluation metric is:
 
@@ -511,23 +347,21 @@ $$
 ### 5.1 ARCH Forecasts
 
 ```{r forecast ARCH(2) models}
-# Forecast ARCH(2) with normal distribution of innovations 8 periods ahead
-fcstARCH2_nd <- rugarch::ugarchforecast(fitORspec = fitARCH2, n.ahead = 8)
+# Forecast ARCH(2) with t-distribution 10 periods ahead
+# (number of observation in month of June)
+ARCH2std_fcst <- rugarch::ugarchforecast(fitORspec = fitARCH2std, n.ahead = 10)
 
-# Forecast ARCH(2) with t-distribution of innovations 8 periods ahead
-fcstARCH2_std <- rugarch::ugarchforecast(fitORspec = fitARCH2_std, n.ahead = 8)
-
-# Forecast ARCH(2) with t-distribution of innovations 8 periods ahead
-fcstARCH2_sstd <- rugarch::ugarchforecast(fitORspec = fitARCH2_sstd, n.ahead = 8)
+# Forecast ARCH(2) with skewed t-distribution 10 periods ahead
+ARCH2sstd_fcst <- rugarch::ugarchforecast(fitORspec = fitARCH2sstd, n.ahead = 10)
 ```
 
 Store forecasted conditional standard deviation of ARCH models into a data frame:
 
 ```{r store forecast of ARCH}
-fcstARCH2 <- cbind(sigma(fcstARCH2_nd), sigma(fcstARCH2_std), sigma(fcstARCH2_sstd)) %>%
-  `colnames<-`(c("ARCH2_ND", "ARCH2_STD", "ARCH2_SSTD"))
+fcstARCH2 <- cbind(sigma(ARCH2std_fcst), sigma(ARCH2sstd_fcst)) %>%
+  `colnames<-`(c("ARCH2_STD", "ARCH2_SSTD"))
 
-fcstARCH2
+data.frame(fcstARCH2)
 ```
 
 Calculate evaluation metrics for each ARCH model:
@@ -535,7 +369,7 @@ Calculate evaluation metrics for each ARCH model:
 ```{r evaluation metrics for ARCH(2) models}
 evalARCH <- NULL
 
-for (i in 1:3) {
+for (i in 1:2) {
   mse <- mean((proxy$Volatility^2 - fcstARCH2[,i]^2)^2)
   
   rmse <- sqrt(mse)
@@ -553,23 +387,20 @@ evalARCH
 ### 5.2 GARCH Forecasts
 
 ```{r forecast GARCH(1,1) models}
-# Forecast GARCH(1, 1) with normal distribution of innovations 8 periods ahead
-fcstGARCH11_nd <- rugarch::ugarchforecast(fitORspec = fitGARCH11, n.ahead = 8)
+# Forecast GARCH(1, 1) with t-distribution 10 periods ahead
+GARCHstd_fcst <- rugarch::ugarchforecast(fitORspec = fitGARCHstd, n.ahead = 10)
 
-# Forecast GARCH(1, 1) with t-distribution of innovations 8 periods ahead
-fcstGARCH11_std <- rugarch::ugarchforecast(fitORspec = fitGARCH11_std, n.ahead = 8)
-
-# Forecast GARCH(1, 1) with t-distribution of innovations 8 periods ahead
-fcstGARCH11_sstd <- rugarch::ugarchforecast(fitORspec = fitGARCH11_sstd, n.ahead = 8)
+# Forecast GARCH(1, 1) with skewed t-distribution 10 periods ahead
+GARCHsstd_fcst <- rugarch::ugarchforecast(fitORspec = fitGARCHsstd, n.ahead = 10)
 ```
 
 Store forecasted conditional standard deviation of GARCH models into a data frame:
 
 ```{r store forecast of GARCH}
-fcstGARCH11 <- cbind(sigma(fcstGARCH11_nd), sigma(fcstGARCH11_std), sigma(fcstGARCH11_sstd)) %>%
-  `colnames<-`(c("GARCH11_ND", "GARCH11_STD", "GARCH11_SSTD"))
+fcstGARCH <- cbind(sigma(GARCHstd_fcst), sigma(GARCHsstd_fcst)) %>%
+  `colnames<-`(c("GARCH11_STD", "GARCH11_SSTD"))
 
-fcstGARCH11
+data.frame(fcstGARCH)
 ```
 
 Calculate evaluation metrics for each GARCH model:
@@ -577,118 +408,42 @@ Calculate evaluation metrics for each GARCH model:
 ```{r evaluation metrics for GARCH(1,1) models}
 evalGARCH <- NULL
 
-for (i in 1:3) {
-  mse <- mean((proxy$Volatility^2 - fcstGARCH11[,i]^2)^2)
+for (i in 1:2) {
+  mse <- mean((proxy$Volatility^2 - fcstGARCH[,i]^2)^2)
   
   rmse <- sqrt(mse)
   
-  mae <- mean(abs(proxy$Volatility^2 - fcstGARCH11[,i]^2))
+  mae <- mean(abs(proxy$Volatility^2 - fcstGARCH[,i]^2))
   
   evalGARCH <- rbind(evalGARCH, c(MSE = mse, RMSE = rmse, MAE= mae))
 }
 
-rownames(evalGARCH) <- colnames(fcstGARCH11)
+rownames(evalGARCH) <- colnames(fcstGARCH)
 
 evalGARCH
 ```
 
-### 5.3 GJR-GARCH Forecasts
+### 5.3 Plots of Forecast
 
-```{r forecast GJR-GARCH(1,1) models}
-# Forecast GJR-GARCH(1, 1) with normal distribution of innovations 8 periods ahead
-fcstGJR11_nd <- rugarch::ugarchforecast(fitORspec = fitGJR11, n.ahead = 8)
+```{r plotting forecasts from models}
+par(mfrow = c(2,2))
 
-# Forecast GJR-GARCH(1, 1) with t-distribution of innovations 8 periods ahead
-fcstGJR11_std <- rugarch::ugarchforecast(fitORspec = fitGJR11_std, n.ahead = 8)
+plot(fcstARCH2[,1], type = "l", main = "Forecast of ARCH(2) with t-Distribution",
+     xlab = "Period", ylab = "Conditional SD")
+plot(fcstARCH2[,2], type = "l", main = "Forecast of ARCH(2) with skewed \n t-Distribution",
+     xlab = "Period", ylab = "Conditional SD")
 
-# Forecast GJR-GARCH(1, 1) with t-distribution of innovations 8 periods ahead
-fcstGJR11_sstd <- rugarch::ugarchforecast(fitORspec = fitGJR11_sstd, n.ahead = 8)
+plot(fcstGARCH[,1], type = "l", main = "Forecast of GARCH(1,1) with t-Distribution",
+     xlab = "Period", ylab = "Conditional SD")
+plot(fcstGARCH[,2], type = "l", main = "Forecast of GARCH(1,1) with skewed \n t-Distribution",
+     xlab = "Period", ylab = "Conditional SD")
 ```
 
-Store forecasted conditional standard deviation of GJR-GARCH models into a data frame:
-
-```{r store forecast of GJR-GARCH}
-fcstGJR11 <- cbind(sigma(fcstGJR11_nd), sigma(fcstGJR11_std), sigma(fcstGJR11_sstd)) %>%
-  `colnames<-`(c("GJR11_ND", "GJR11_STD", "GJR11_SSTD"))
-
-fcstGJR11
-```
-
-Calculate evaluation metrics for each GJR-GARCH model:
-
-```{r evaluation metrics for GJR-GARCH(1,1) models}
-evalGJR <- NULL
-
-for (i in 1:3) {
-  mse <- mean((proxy$Volatility^2 - fcstGJR11[,i]^2)^2)
-  
-  rmse <- sqrt(mse)
-  
-  mae <- mean(abs(proxy$Volatility^2 - fcstGJR11[,i]^2))
-  
-  evalGJR <- rbind(evalGJR, c(MSE = mse, RMSE = rmse, MAE= mae))
-}
-
-rownames(evalGJR) <- colnames(fcstGJR11)
-
-evalGJR
-```
-
-### 5.4 EGARCH Forecasts
-
-```{r forecast EGARCH(1,1) models}
-# Forecast EGARCH(1, 1) with normal distribution of innovations 8 periods ahead
-fcstEGARCH11_nd <- rugarch::ugarchforecast(fitORspec = fitEGARCH11, n.ahead = 8)
-
-# Forecast EGARCH(1, 1) with t-distribution of innovations 8 periods ahead
-fcstEGARCH11_std <- rugarch::ugarchforecast(fitORspec = fitEGARCH11_std, n.ahead = 8)
-
-# Forecast EGARCH(1, 1) with t-distribution of innovations 8 periods ahead
-fcstEGARCH11_sstd <- rugarch::ugarchforecast(fitORspec = fitEGARCH11_sstd, n.ahead = 8)
-```
-
-Store forecasted conditional standard deviation of EGARCH models into a data frame:
-
-```{r store forecast of EGARCH}
-fcstEGARCH11 <- cbind(sigma(fcstEGARCH11_nd), sigma(fcstEGARCH11_std), sigma(fcstEGARCH11_sstd)) %>%
-  `colnames<-`(c("EGARCH11_ND", "EGARCH11_STD", "EGARCH11_SSTD"))
-
-fcstEGARCH11
-```
-
-Calculate evaluation metrics for each EGARCH model:
-
-```{r evaluation metrics for EGARCH(1,1) models}
-evalEGARCH <- NULL
-
-for (i in 1:3) {
-  mse <- mean((proxy$Volatility^2 - fcstEGARCH11[,i]^2)^2)
-  
-  rmse <- sqrt(mse)
-  
-  mae <- mean(abs(proxy$Volatility^2 - fcstEGARCH11[,i]^2))
-  
-  evalEGARCH <- rbind(evalEGARCH, c(MSE = mse, RMSE = rmse, MAE= mae))
-}
-
-rownames(evalEGARCH) <- colnames(fcstEGARCH11)
-
-evalEGARCH
-```
-
-### 5.5 Summary
-
-Summarizing the evaluation metrics of all the models:
-
-```{r summary of evaluation metrics}
-rbind(evalARCH, evalGARCH, evalGJR, evalEGARCH)
-```
-
-The EGARCH(1, 1) model with assumed normal distribution of innovations had the best MSE and RMSE, but it was surprising that the GJR-GARCH(1, 1) with assumed t-distribution of innovations had the best MAE. The EGARCH and GJR-GARCH models seem to be able to capture the higher volatility in the first 2 forecast periods better than the standard ARCH and GARCH models, likely due to the negative returns in those periods. However, all models were weak in capturing the volatility of returns past the 4th period in the forecast period using the basic forecast function. Since forecasting many periods ahead is bound to fail regardless of the type of models used, it is better to keep the forecast period short when using such models.
+By plotting the forecasts, we see that the GARCH models do not have the ups and downs as shown in the ARCH models. However, these models do not seem to be able to forecast the volatility of SPY returns sufficiently even in the very short run. This may not be a surprise as many factors affect volatility, for example news related to the company and macroeconomic environment.
 
 ## 6 Final Remarks
 
-While the project intended to show how ARCH and GARCH (and its variants) can be used in R to model volatility, I believe there is much to be desired from the forecasting results in Section 4. Due to the innovations ($z_t$) that cannot be observed, the forecasts does not include the 8-period ahead returns. The bootstrapping method of forecasting in the **`rugarch`** package may be a solution, which I may tackle in another project and determine its feasibility and accuracy. I am also curious about the performance of rolling estimation since there can be structural changes to AAPL, such as business environment, company prospects, new innovations, etc. that could affect the estimation of the models.
+While ARCH and GARCH can be used to model conditional variance, I believe there is much to be desired from the out-of-sample predictive ability from the models in this project. Furthermore, as $z_t$ is a stochastic variable, I was unable to forecast the returns series and it would require certain bootstrapping techniques to do so. There are also other variants of GARCH models that may be useful for modeling volatility, which I will explore in the future.
 
 ## References
 
