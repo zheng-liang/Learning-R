@@ -48,12 +48,14 @@ Click the link to access the rendered HTML file: https://tinyurl.com/e5ed7mws
 
 The purpose of this project is to find out if using median returns in portfolio optimization could lead to better portfolio 
 performance compared to mean returns. Due to the non-normal distribution of returns, the median may be a better optimization 
-objective of expected returns.  
+objective of expected returns than the mean.  
 
-The results of this project found that using the median return to find the optimal portfolio did not lead to significant 
-improvement in portfolio performance than using the mean return. However, this should not be taken as evidence against the 
-median return as the project was flawed in its own ways, which I described in the project. Improvements need to be made to 
-the optimization methodology and constraint selection for finding the optimal portfolios.  
+I found that portfolios maximizing the median returns led to better diversification than maximizing the mean returns. 
+Furthermore, minimizing the median absolute deviation resulted in a portfolio that has the highest return among portfolios 
+minimizing the different risk measures. However, this project does not include an optimal portfolio selection which maximizes 
+return for a given level of risk, or minimizes risk for a given level of return. The project does include a few other flaws, 
+such as having only a small number of random portfolios generated for testing and not being able to show conclusively that 
+the median measure is better than the mean.  
 
 Click the link to access the rendered HTML file: https://tinyurl.com/yx526k2m
 
