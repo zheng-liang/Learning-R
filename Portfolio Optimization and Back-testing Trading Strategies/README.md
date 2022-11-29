@@ -12,7 +12,7 @@ For the single-period optimization, I created one portfolio that minimizes varia
 For the back-testing optimization, I used the mean-variance portfolio, and solved the optimization using the random
 portfolio method.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/3cdmwfv4
+Click the link to access the rendered HTML file: https://tinyurl.com/yfyxuzat
 
 ### 2 Effects of Risk Measures on Portfolio Composition and Performance
 
@@ -31,7 +31,7 @@ In the first part, I introduced the different measures on a single security and 
 
 The portfolio was created using 10 large-cap U.S. equities, and benchmarked against the SPDR S&P 500 ETF (SPY).  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/mrvee6zu  
+Click the link to access the rendered HTML file: https://tinyurl.com/4cdu4r47  
 
 ### 3 Random Selection, Expertise and Index Investing
 
@@ -42,7 +42,7 @@ developed by Harry Markowitz for simplicity, with the goal of maximizing the ex-
 The project is meant to be a fun/thought experiment, and is not meant to disprove of index or active investing. It does not
 make use of any statistical methods to prove that random selection, expertise or index investing is a better choice.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/2p8csyhj
+Click the link to access the rendered HTML file: https://tinyurl.com/e5ed7mws
 
 ### 4 Returns and Risks: The Mean and The Median
 
@@ -55,7 +55,7 @@ improvement in portfolio performance than using the mean return. However, this s
 median return as the project was flawed in its own ways, which I described in the project. Improvements need to be made to 
 the optimization methodology and constraint selection for finding the optimal portfolios.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/mrx8vzzx
+Click the link to access the rendered HTML file: https://tinyurl.com/yx526k2m
 
 ### 5 Testing the Feasibility of a Rolling Window CAPM Strategy
 
