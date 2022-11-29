@@ -68,4 +68,4 @@ for all stocks, but applying the CAPM trading strategy on Apple Inc. was able to
 stock had outperformed the S&P 500 ETF over the years but it could be attributed to having chosen a stock that had outperformed 
 the market consistently.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/587jpk2y
+Click the link to access the rendered HTML file: https://tinyurl.com/yvmdu3wd
