@@ -1,0 +1,176 @@
+---
+title: "Testing the Feasibility of a Rolling Window CAPM Strategy"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show 
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+This project aims to test if the Capital Asset Pricing Model (CAPM) estimated using a rolling window could allow an investor or trader to take advantage of inefficiencies in market pricing. I used a short-term modeling strategy with 5 trading days of historical data per estimation to capture the short-term pricing inefficiencies. It does not conclude if the strategy is effective for all stocks, but applying the CAPM trading strategy on Apple Inc. was able to yield short-term outperformance. Furthermore, the stock had outperformed the S&P 500 ETF over the years but it could be attributed to having chosen a stock that had outperformed the market consistently.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(tidyquant) # Loads quantmod and PerformanceAnalytics packages
+library(tidyverse) # Loads dplyr and ggplot2 packages (data manipulation and plotting)
+```
+
+## 3 Methodology and Data
+
+Using the daily returns of Apple Inc. (ticker: AAPL) from January 2021 to October 2022, I estimated the CAPM with with a rolling window using past 5 trading days of returns each time. I will be using the SPDR S&P 500 ETF (ticker: SPY) as a proxy for the market return and the market yield on the 1-month US Treasury security (FRED: DGS1MO) as a proxy for the risk-free rate, which would be divided by 252 to obtain the simple daily rate (yield is stated on an annualized rate). The stock prices are obtained from Yahoo Finance, while the risk-free rate is obtained from the Federal Reserve of St. Louis FRED database. Stock returns are calculated using $$r_t = \ln \bigg( \frac{P_t}{P_{t-1}} \bigg) = \ln(P_t) - \ln(P_{t-1})$$
+
+There are 2 ways to estimate the beta of the stock. The first way is to regress the stock returns on the market returns to obtain the coefficient describing the relationship between these two variables, or the slope of the linear equation, which is the beta of the stock. The second way is to find the covariance of the market return and the stock return and divide it by the variance of the market return, which can be calculated simply by using **`PerformanceAnalytics::CAPM.beta()`**.
+
+The steps to obtain a trading strategy based on the CAPM is as follows:
+
+1. Estimate the beta using past 5 days of data
+2. Estimate the required rate of return using the CAPM formula, where $R_M$ is the average daily log-return of the market index in the period used to estimate the beta and $R_f$ is the average daily return of the 1-month T-Bill
+3. Estimate the expected rate of return, which is based on a naive method of using the average actual daily log-return of the stock during the estimation period
+4. Compare the expected return to the required return
+
+If expected return is more than required return, the stock is undervalued and I would take a long position on the stock on the next trading day at the opening price. If the expected return is less than the required return, the stock is overvalued and I would sell the long position (or take a short position for sophisticated traders) on the next trading day. I assumed that trading cost is 0 and that trades can be filled at any point in time. Furthermore, if expected return is negative, I would not take a long position as that means AAPL is on a short-term downtrend.
+
+I used **`quantmod::getSymbols()`** to obtain historical prices of AAPL and SPY, which can also be used to obtain the market yield of the 1-month US T-Bill from the FRED database.
+
+```{r obtain prices of AAPL and SPY}
+# Set start and end date for data retrieval (does not work when retrieving data from FRED)
+startdate <- as.Date("2017-12-31")
+enddate <- as.Date("2022-11-01")
+
+spy <- quantmod::getSymbols(Symbols = "SPY", src = "yahoo", auto.assign = FALSE,
+                            from = startdate, to = enddate, periodicity = "daily")
+
+aapl <- quantmod::getSymbols(Symbols = "AAPL", src = "yahoo", auto.assign = FALSE,
+                            from = startdate, to = enddate, periodicity = "daily")
+```
+
+```{r obtain 1-month US T-Bill yield}
+# Retrieving data from FRED automatically retrieves the whole series available
+US1M <- quantmod::getSymbols(Symbols = "DGS1MO", src = "FRED", auto.assign = FALSE)
+
+rfr <- US1M["2017-12-31/2022-10-31"]
+```
+
+```{r merge data}
+# Merge adjusted closing prices (col. 6) of AAPL and SPY with risk-free rate
+dat <- merge(aapl[,6], spy[,6], rfr, all = F)
+
+# Rename columns
+colnames(dat) <- c("AAPL", "SPY", "RFR")
+
+# Check for missing data
+colSums(is.na(dat))
+
+# Replace NA in rfr with last observation and convert to daily rate by dividing 252
+dat$RFR <- na.locf(dat$RFR)/252
+
+# Preview data
+head(dat)
+```
+
+```{r calculate log returns for stocks}
+# Calculate log returns for AAPL and SPY using PerformanceAnalytics::Return.calculate()
+# Convert returns to percentage
+dat <- cbind(dat, 
+             PerformanceAnalytics::Return.calculate(prices = dat$AAPL, method = "log") * 100, 
+             PerformanceAnalytics::Return.calculate(prices = dat$SPY, method = "log") * 100) %>%
+  `colnames<-`(c(colnames(dat), "rAAPL", "rSPY"))
+
+head(dat)
+```
+
+## 4 Estimating the Rolling-Window CAPM
+
+The beta can be estimated with **`PerformanceAnalytics::CAPM.beta()`** and **`rollapply()`** using the past 30 observations. Proxy for the expected return can also be calculated with **`rollapply()`**.
+
+```{r beta and expected return}
+dat$beta <- rollapply(data = dat[-1, 4:5], width = 5, by.column = F, 
+                      function(x) CAPM.beta(Ra = x[,1], Rb = x[,2]))
+
+dat$exp.return <- rollapply(data = dat[-1, 4], width = 5, mean)
+```
+
+Calculate the required return for AAPL based on CAPM each day, after obtaining the average market return and risk-free rate:
+
+```{r required return}
+dat$mean.RFR <- rollapply(data = dat[-1, 3], width = 5, mean)
+
+dat$mean.RM <- rollapply(data = dat[-1, 5], width = 5, mean)
+
+dat$req.return <- dat$mean.RFR + dat$beta * (dat$mean.RM - dat$mean.RFR)
+```
+
+## 5 Implementing the Trading Strategy
+
+As mentioned in Section 3, if the expected return is higher than required return, I would long AAPL the next trading day at the opening price, and if it is lower, I would sell the long position at the opening price the next trading day.
+
+This would be first denoted by "1" if the CAPM trading strategy indicated a long position, and "0" if a sell position (or can be viewed as no position in the stock).
+
+```{r trading signal}
+# Create a new xts object saving only the needed columns of data
+dat2 <- na.omit(merge(dat[,c(7,10)], aapl$AAPL.Open))
+
+# Use the Lag() function to shift the results down one row
+dat2$signal <- Lag(dat2$exp.return > dat2$req.return & dat2$exp.return > 0)
+```
+
+Since I would buy and sell at the opening price, I would calculate the returns of the trading strategy using these prices for simplicity.
+
+```{r returns from trading strategy}
+# Signal created can be seen as the weight of the asset on a particular day
+# Need to lag one more period as I assume a buy or sell on the next trading day opening price
+trading_returns <- Return.calculate(prices = dat2$AAPL.Open, method = "log") * Lag(dat2$signal)
+
+# Plot cumulative return from trading strategy by converting log returns to standard returns
+# Assume starting capital of $10,000
+plot(10000*(exp(cumsum(na.omit(trading_returns)))), 
+     main = "Cumulative Return from CAPM Trading Strategy",
+     grid.col = NA)
+```
+
+## 6 Summary and Final Remarks
+
+To summarize, I plotted the trading returns together with the actual returns from AAPL on a buy-and-hold strategy and the returns from investing in the S&P 500 ETF and obtained the annualized return and standard deviation to compare the performance of the trading strategy.
+
+```{r plot returns for comparison}
+return_plot <- merge(10000*(exp(cumsum(na.omit(dat$rAAPL/100)))), 
+           10000*(exp(cumsum(na.omit(trading_returns)))), 
+           10000*(exp(cumsum(na.omit(dat$rSPY/100)))))
+
+colnames(return_plot) <- c("Buy-and-Hold", "CAPM Trading Strategy", "S&P 500 ETF")
+
+plot(return_plot, 
+     main = "Comparison of Cumulative Returns", 
+     legend.loc = "topleft",
+     grid.col = NA)
+```
+
+```{r risk and return metrics}
+return_dat <- merge(dat$rAAPL/100, trading_returns, dat$rSPY/100)
+
+colnames(return_dat) <- c("Buy-and-Hold", "CAPM Trading Strategy", "S&P 500 ETF")
+
+table.AnnualizedReturns(R = return_dat, scale = 252, geometric = FALSE)
+```
+
+In the short run, the CAPM trading strategy was able to outperform a buy-and-hold strategy. However, as expected, active trading did not outperform a more passive strategy. However, the CAPM strategy had a lower annualized standard deviation, resulting in a higher annualized Sharpe ratio. The strategy had also outperformed the SPY over the 5 year period.
+
+There are 2 important caveats to the trading strategy proposed here:
+
+1. As mentioned in Section 3, I assumed zero transaction costs and that trades can be filled at the opening price at any point in time
+2. Only a single stock was chosen for the backtesting, which means that it may or may not apply to other stocks
+
+In the future, I would test if the CAPM strategy could be improved, for example by changing the way the expected returns are estimated or by adding other factors to the model to improve the estimate of the required returns.
