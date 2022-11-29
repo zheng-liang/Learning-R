@@ -1,5 +1,5 @@
 ---
-title: "Testing a Short-Term Trading Strategy Using a Rolling Window CAPM"
+title: "Testing a Trading Strategy Using a Rolling Window CAPM"
 author: "Tan Zheng Liang"
 date: "`r Sys.Date()`"
 output: 
@@ -30,7 +30,7 @@ library(tidyverse) # Loads dplyr and ggplot2 packages (data manipulation and plo
 
 ## 3 Methodology and Data
 
-Using the daily returns of Apple Inc. (ticker: AAPL) from January 2021 to October 2022, I estimated the CAPM with with a rolling window using past 5 trading days of returns each time. I will be using the SPDR S&P 500 ETF (ticker: SPY) as a proxy for the market return and the market yield on the 1-month US Treasury security (FRED: DGS1MO) as a proxy for the risk-free rate, which would be divided by 252 to obtain the simple daily rate (yield is stated on an annualized rate). The stock prices are obtained from Yahoo Finance, while the risk-free rate is obtained from the Federal Reserve of St. Louis FRED database. Stock returns are calculated using $$r_t = \ln \bigg( \frac{P_t}{P_{t-1}} \bigg) = \ln(P_t) - \ln(P_{t-1})$$
+Using the daily returns of Apple Inc. (ticker: AAPL) from January 2018 to October 2022, I estimated the CAPM with with a rolling window using past 5 trading days of returns each time. I will be using the SPDR S&P 500 ETF (ticker: SPY) as a proxy for the market return and the market yield on the 1-month US Treasury security (FRED: DGS1MO) as a proxy for the risk-free rate, which would be divided by 252 to obtain the simple daily rate (yield is stated on an annualized rate). The stock prices are obtained from Yahoo Finance, while the risk-free rate is obtained from the Federal Reserve of St. Louis FRED database. Stock returns are calculated using $$r_t = \ln \bigg( \frac{P_t}{P_{t-1}} \bigg) = \ln(P_t) - \ln(P_{t-1})$$
 
 There are 2 ways to estimate the beta of the stock. The first way is to regress the stock returns on the market returns to obtain the coefficient describing the relationship between these two variables, or the slope of the linear equation, which is the beta of the stock. The second way is to find the covariance of the market return and the stock return and divide it by the variance of the market return, which can be calculated simply by using **`PerformanceAnalytics::CAPM.beta()`**.
 
