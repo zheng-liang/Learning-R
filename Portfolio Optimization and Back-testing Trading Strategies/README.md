@@ -59,7 +59,7 @@ the median measure is better than the mean.
 
 Click the link to access the rendered HTML file: https://tinyurl.com/mryyeu8s
 
-### 5 Testing a Short-Term Trading Strategy Using a Rolling Window CAPM
+### 5 Testing a Trading Strategy Using a Rolling Window CAPM
 
 This project aims to test if the Capital Asset Pricing Model (CAPM) estimated using a rolling window could allow an investor 
 or trader to take advantage of inefficiencies in market pricing. I used a short-term modeling strategy with 5 trading days of 
@@ -68,4 +68,4 @@ for all stocks, but applying the CAPM trading strategy on Apple Inc. was able to
 stock had outperformed the S&P 500 ETF over the years but it could be attributed to having chosen a stock that had outperformed 
 the market consistently.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/yvmdu3wd
+Click the link to access the rendered HTML file: https://tinyurl.com/2p9d26jp
