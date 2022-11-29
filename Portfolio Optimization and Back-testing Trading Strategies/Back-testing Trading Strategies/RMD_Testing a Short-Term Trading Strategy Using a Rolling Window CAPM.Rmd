@@ -1,5 +1,5 @@
 ---
-title: "Testing the Feasibility of a Rolling Window CAPM Strategy"
+title: "Testing a Short-Term Trading Strategy Using a Rolling Window CAPM"
 author: "Tan Zheng Liang"
 date: "`r Sys.Date()`"
 output: 
@@ -94,7 +94,7 @@ head(dat)
 
 ## 4 Estimating the Rolling-Window CAPM
 
-The beta can be estimated with **`PerformanceAnalytics::CAPM.beta()`** and **`rollapply()`** using the past 30 observations. Proxy for the expected return can also be calculated with **`rollapply()`**.
+The beta can be estimated with **`PerformanceAnalytics::CAPM.beta()`** and **`rollapply()`** using the past 5 observations. Proxy for the expected return can also be calculated with **`rollapply()`**.
 
 ```{r beta and expected return}
 dat$beta <- rollapply(data = dat[-1, 4:5], width = 5, by.column = F, 
