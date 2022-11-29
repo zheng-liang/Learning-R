@@ -57,7 +57,7 @@ return for a given level of risk, or minimizes risk for a given level of return.
 such as having only a small number of random portfolios generated for testing and not being able to show conclusively that 
 the median measure is better than the mean.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/yx526k2m
+Click the link to access the rendered HTML file: https://tinyurl.com/mryyeu8s
 
 ### 5 Testing the Feasibility of a Rolling Window CAPM Strategy
 
