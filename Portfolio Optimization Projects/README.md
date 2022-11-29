@@ -57,7 +57,7 @@ the optimization methodology and constraint selection for finding the optimal po
 
 Click the link to access the rendered HTML file: https://tinyurl.com/mrx8vzzx
 
-### 4 Testing the Feasibility of a Rolling Window CAPM Strategy
+### 5 Testing the Feasibility of a Rolling Window CAPM Strategy
 
 This project aims to test if the Capital Asset Pricing Model (CAPM) estimated using a rolling window could allow an investor 
 or trader to take advantage of inefficiencies in market pricing. I used a short-term modeling strategy with 5 trading days of 
