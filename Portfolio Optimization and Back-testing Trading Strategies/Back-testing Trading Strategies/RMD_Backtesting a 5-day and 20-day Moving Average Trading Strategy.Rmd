@@ -1,0 +1,285 @@
+---
+title: "Backtesting a 5-day and 20-day Moving Average Trading Strategy"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+Through this project, I attempted to test the feasibility of using the 5-day and 20-day moving averages to generate trading signals. There are two common types of moving averages, which are simple and exponential (typically shortened to SMA and EMA) and can be implemented on different timeframes, from the 1-minute stock prices to the daily or lower period values. I used the SMA and EMA on the daily timeframe to generate signals for short-term trading and tested its effectiveness.
+
+The results show that SMA and EMA can provide excess returns for some stocks and may lead to poor returns when used on other stocks. However, these results were based on the assumptions of zero trading costs and that trades could be filled at the opening prices at any point in time. By including trading costs, one would obtain significantly lower returns depending on how frequent buy and sell signals were generated. Furthermore, past performance is not indicative of future performance and thus, if the results show that the moving average strategy worked for a stock based on the backtest, it may not work in the future.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE, class.source = "fold-show"}
+library(tidyquant) # Loads quantmod, PerformanceAnalytics and TTR packages
+library(tidyverse) # Loads dplyr and ggplot2 packages (data manipulation and plotting)
+```
+
+## 3 Methodology and Data
+
+I implemented the trading strategies on Apple Inc. (AAPL), Exxon Mobil Corporation (XOM), Microsoft Corporation (MSFT), Procter & Gamble Company (PG) and Merck & Co. Inc. (MRK). I first tested the strategies using SMAs, followed by EMAs, and compared the performance to buying and holding the ETFs over the period from January 2018 to October 2022.
+
+While there are many strategies involving moving averages (MAs), I used a simple rule to determine the buy or sell decision. The steps to this trading strategy are:
+
+1. Calculate the 10-day and 20-day MAs using the closing prices
+2. If the 10-day MA > 20-day MA and the 20-day SMA is upward sloping, I would buy the stock
+3. Otherwise, I would exit my long position and/or not hold the stock
+
+I would buy or sell the stocks at the opening price the next trading day after the MAs provide a signal. I assumed zero trading costs and that all trades can be filled at any point in time, which is not practical, but allowed me to test the effectiveness of the strategies in a simple manner.
+
+The opening and closing prices of the stocks can be obtained using **`quantmod::getSymbols()`**.
+
+```{r obtain closing prices}
+# Set start and end date for data retrieval
+startdate <- as.Date("2018-01-01")
+enddate <- as.Date("2022-11-01")
+
+# Create vector of tickers
+ticker <- c("AAPL", "XOM", "MSFT", "PG", "MRK")
+
+dat <- list()
+
+for (t in seq(ticker)) {
+  dat[[ticker[t]]] <- quantmod::getSymbols(Symbols = ticker[t], src = "yahoo", auto.assign = FALSE,
+                                           from = startdate, to = enddate, periodicity = "daily")
+}
+
+names(dat); lapply(dat, head, 3)
+```
+
+## 4 SMA Trading Strategy {.tabset .tabset-pills}
+
+The 5-day and 20-day SMAs can be calculated using **`TTR::SMA()`**.
+
+```{r calculate SMA, class.source = "fold-show"}
+for (i in seq(dat)) {
+  dat[[i]]$SMA5 <- TTR::SMA(x = quantmod::Cl(dat[[i]]), n = 5)
+  
+  dat[[i]]$SMA20 <- TTR::SMA(x = quantmod::Cl(dat[[i]]), n = 20)
+}
+```
+
+Generate trading signals by checking if SMA5 is above SMA20 or if the SMA20 is on an uptrend:
+
+```{r generate SMA trading signals, class.source = "fold-show"}
+# Generate TRUE/FALSE boolean, which is converted to 1 or 0
+for (i in seq(dat)) {
+  dat[[i]]$SMAsignal <- dat[[i]]$SMA5 > dat[[i]]$SMA20 | diff(dat[[i]]$SMA20, lag = 5)/5 > 0
+}
+```
+
+Since I buy or sell at the opening price, I would calculate returns based on these prices for simplicity.
+
+```{r returns from SMA trading strategy, class.source = "fold-show"}
+# Calculate returns using opening price and lag the SMAsignal twice for backtesting
+# Reason: buy the next day after the SMAsignal and returns are calculated using previous day value
+for (i in seq(dat)) {
+  dat[[i]]$SMAreturn <- Return.calculate(prices = Op(dat[[i]]), method = "log") * Lag(dat[[i]]$SMAsignal, k = 2)
+}
+```
+
+### 4.1 Plot of Cumulative Return
+
+I plotted the returns from trading each stock against the returns earned by holding the stock over the period.
+
+```{r plot returns from SMA strategy}
+# Calculate the returns earned by holding the stocks using adjusted prices
+# Adjusted prices include splits and dividends information
+for (i in seq(dat)) {
+  dat[[i]]$total.return <- Return.calculate(prices = Ad(dat[[i]]), method = "log")
+}
+
+# Save the cumulative return data in a separate dataframe
+SMAreturn_plot <- NULL
+
+for (i in seq(dat)) {
+  SMAreturn_plot <- cbind(SMAreturn_plot,
+                          10000 * exp(cumsum(na.omit(dat[[i]]$SMAreturn))),
+                          10000 * exp(cumsum(na.omit(dat[[i]]$total.return))))
+}
+
+colnames(SMAreturn_plot) <- paste(rep(ticker, each = 2), 
+                                  rep(c("SMA Trading Strategy", "Total Return"), length(dat)))
+
+for (i in seq(from = 1, to = ncol(SMAreturn_plot), by = 2)) {
+  plot(SMAreturn_plot[, c(i, i+1)],
+       main = paste("Comparison of Cumulative Returns for", rep(ticker, each = 2)[i]),
+       legend.loc = "topleft", grid.col = NA) %>% 
+    print()
+}
+```
+
+### 4.2 Table of Annualized Metrics
+
+Calculate the annualized returns and standard deviation for comparison of performance using **`PerformanceAnalytics::table.AnnualizedReturns()`**.
+
+```{r annualized return and sd of SMA trading strategy}
+for (i in seq(dat)) {
+  PerformanceAnalytics::table.AnnualizedReturns(R = dat[[i]][, c("SMAreturn","total.return")],
+                                                scale = 252,
+                                                Rf = 0.03/252,
+                                                geometric = FALSE) %>%
+    `colnames<-`(paste(rep(ticker[i], 2),
+                       rep(c("SMA Trading Strategy", "Total Return")))) %>%
+    print()
+}
+```
+
+The SMA trading strategy did not work for all 5 stocks. It provided excess returns when implemented on AAPL and XOM, but produced subpar results for MSFT, PG and MRK. For AAPL and XOM, the excess returns may be diminished significantly if trading costs are included.
+
+## 5 EMA Trading Strategy {.tabset .tabset-pills}
+
+Instead of using SMA5 and SMA20, I used the EMA5 and EMA20 to generate trading signals. All the steps involved are the same as in Section 3.
+
+The 5-day and 20-day EMAs can be calculated using **`TTR::EMA()`**.
+
+```{r calculate EMA, class.source = "fold-show"}
+for (i in seq(dat)) {
+  dat[[i]]$EMA5 <- TTR::EMA(x = quantmod::Cl(dat[[i]]), n = 5)
+  
+  dat[[i]]$EMA20 <- TTR::EMA(x = quantmod::Cl(dat[[i]]), n = 20)
+}
+```
+
+Generate trading signals by checking if EMA5 is above EMA20 or if the EMA20 is on an uptrend:
+
+```{r generate EMA trading signals, class.source = "fold-show"}
+# Generate TRUE/FALSE boolean, which is converted to 1 or 0
+for (i in seq(dat)) {
+  dat[[i]]$EMAsignal <- dat[[i]]$EMA5 > dat[[i]]$EMA20 | diff(dat[[i]]$EMA20, lag = 5)/5 > 0
+}
+```
+
+Calculate returns from EMA trading strategy:
+
+```{r returns from EMA trading strategy, class.source = "fold-show"}
+# Calculate returns using opening price and lag the EMAsignal twice for backtesting
+# Reason: buy the next day after the EMAsignal and returns are calculated using previous day value
+for (i in seq(dat)) {
+  dat[[i]]$EMAreturn <- Return.calculate(prices = Op(dat[[i]]), method = "log") * Lag(dat[[i]]$EMAsignal, k = 2)
+}
+```
+
+### 5.1 Plot of Cumulative Return
+
+Plot the returns from trading each stock against the returns earned by holding the stock over the period:
+
+```{r plot returns from EMA strategy}
+# Save the cumulative return data in a separate dataframe
+EMAreturn_plot <- NULL
+
+for (i in seq(dat)) {
+  EMAreturn_plot <- cbind(EMAreturn_plot,
+                          10000 * exp(cumsum(na.omit(dat[[i]]$EMAreturn))),
+                          10000 * exp(cumsum(na.omit(dat[[i]]$total.return))))
+}
+
+colnames(EMAreturn_plot) <- paste(rep(ticker, each = 2), 
+                                  rep(c("EMA Trading Strategy", "Total Return"), length(dat)))
+
+for (i in seq(from = 1, to = ncol(EMAreturn_plot), by = 2)) {
+  plot(EMAreturn_plot[, c(i, i+1)],
+       main = paste("Comparison of Cumulative Returns for", rep(ticker, each = 2)[i]),
+       legend.loc = "topleft", grid.col = NA) %>% 
+    print()
+}
+```
+
+### 5.2 Table of Annualized Metrics
+
+Calculate the annualized returns and standard deviation for comparison of performance using **`PerformanceAnalytics::table.AnnualizedReturns()`**.
+
+```{r annualized return and sd of EMA trading strategy}
+for (i in seq(dat)) {
+  PerformanceAnalytics::table.AnnualizedReturns(R = dat[[i]][, c("EMAreturn","total.return")],
+                                                scale = 252,
+                                                Rf = 0.03/252,
+                                                geometric = FALSE) %>%
+    `colnames<-`(paste(rep(ticker[i], 2),
+                       rep(c("EMA Trading Strategy", "Total Return")))) %>%
+    print()
+}
+```
+
+While the EMA trading strategy improved the returns from trading AAPL and PG, it reduced the returns from trading XOM significantly. This shows that the SMA and EMA strategy does not work for all stocks and cannot be implemented blindly.
+
+## 6 Combining EMA and SMA {.tabset .tabset-pills}
+
+Instead of using EMA and SMA separately, this section attempted to implemented both to generate trading signals. I used the EMA5 and SMA20, such that the slower MA is not too reactive compared to the faster MA.
+
+Since we already have the EMA5 and SMA20 from the previous sections, I only need to generate the trading signals and calculate the returns.
+
+```{r generate EMA+SMA trading signals, class.source = "fold-show"}
+# Generate TRUE/FALSE boolean, which is converted to 1 or 0
+for (i in seq(dat)) {
+  dat[[i]]$EMA_SMA.signal <- dat[[i]]$EMA5 > dat[[i]]$SMA20 | diff(dat[[i]]$SMA20, lag = 5)/5 > 0
+}
+```
+
+Calculate returns from EMA trading strategy:
+
+```{r returns from EMA+SMA trading strategy, class.source = "fold-show"}
+# Calculate returns using opening price and lag the EMAsignal twice for backtesting
+# Reason: buy the next day after the EMAsignal and returns are calculated using previous day value
+for (i in seq(dat)) {
+  dat[[i]]$EMA_SMA.return <- Return.calculate(prices = Op(dat[[i]]), method = "log") * Lag(dat[[i]]$EMA_SMA.signal, k = 2)
+}
+```
+
+### 6.1 Plot of Cumulative Return
+
+Plot the returns from trading each stock against the returns earned by holding the stock over the period:
+
+```{r plot returns from EMA+SMA strategy}
+# Save the cumulative return data in a separate dataframe
+EMASMA_plot <- NULL
+
+for (i in seq(dat)) {
+  EMASMA_plot <- cbind(EMASMA_plot,
+                       10000 * exp(cumsum(na.omit(dat[[i]]$EMA_SMA.return))),
+                       10000 * exp(cumsum(na.omit(dat[[i]]$total.return))))
+}
+
+colnames(EMASMA_plot) <- paste(rep(ticker, each = 2), 
+                                   rep(c("EMA+SMA Trading Strategy", "Total Return"), length(dat)))
+
+for (i in seq(from = 1, to = ncol(EMASMA_plot), by = 2)) {
+  plot(EMASMA_plot[, c(i, i+1)],
+       main = paste("Comparison of Cumulative Returns for", rep(ticker, each = 2)[i]),
+       legend.loc = "topleft", grid.col = NA) %>% 
+    print()
+}
+```
+
+### 6.2 Table of Annualized Metrics
+
+Calculate the annualized returns and standard deviation for comparison of performance using **`PerformanceAnalytics::table.AnnualizedReturns()`**.
+
+```{r annualized return and sd of EMA+SMA trading strategy}
+for (i in seq(dat)) {
+  PerformanceAnalytics::table.AnnualizedReturns(R = dat[[i]][, c("EMA_SMA.return","total.return")],
+                                                scale = 252,
+                                                Rf = 0.03/252,
+                                                geometric = FALSE) %>%
+    `colnames<-`(paste(rep(ticker[i], 2),
+                       rep(c("EMA+SMA Trading Strategy", "Total Return")))) %>%
+    print()
+}
+```
+
+The combination of EMA and SMA generated excess returns for AAPL and XOM, while creating slight positive annualized return for MRK. As mentioned, the inclusion of trading costs would significantly reduce returns from trading, and is not a long-term solution as compared to holding great stocks.
