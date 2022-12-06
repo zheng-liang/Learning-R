@@ -80,6 +80,16 @@ The results show that SMA and EMA can provide excess returns for some stocks and
 However, these results were based on the assumptions of zero trading costs and that trades could be filled at the opening prices at
 any point in time. By including trading costs, one would obtain significantly lower returns depending on how frequent buy and sell 
 signals were generated. Furthermore, past performance is not indicative of future performance and thus, if the results show that the 
-moving average strategy worked for a stock based on the backtest, it may not work in the future.
+moving average strategy worked for a stock based on the backtest, it may not work in the future.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/2d37y3e3
+Click the link to access the rendered HTML file: https://tinyurl.com/2d37y3e3  
+
+### 7 Backtesting a MACD Trading Strategy
+
+In this project, I backtested the Moving Average Convergence/Divergence (MACD) trading strategy. I used the exponential moving 
+averages with the 20-period, 50-period and 5-period as my fast, slow and signal EMAs. The results in this project were based on 
+the assumptions of zero trading costs and that trades could be filled at the opening prices at any point in time. Therefore, any 
+excess return that was achieved through the MACD trading strategy may not be a good proxy of actual performance. Furthermore, past 
+performance is not indicative of future performance.  
+
+Click the link to access the rendered HTML file: https://tinyurl.com/4f7tad9t
