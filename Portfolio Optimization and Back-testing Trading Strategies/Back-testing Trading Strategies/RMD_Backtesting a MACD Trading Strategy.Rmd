@@ -1,0 +1,155 @@
+---
+title: "Backtesting a MACD Trading Strategy"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+In this project, I backtested the Moving Average Convergence/Divergence (MACD) trading strategy. The MACD indicator requires 4 main inputs, which are the periods for the fast and slow moving averages, the period for the signal moving average and the type of moving averages to use. The inputs would mostly depend on the trader's trading horizon (e.g. intraday, scalping, swing trading etc.). For me, I prefer to use the exponential moving averages with the 20-period, 50-period and 5-period as my fast, slow and signal EMAs.
+
+The results in this project were based on the assumptions of zero trading costs and that trades could be filled at the opening prices at any point in time. Therefore, any excess return that was achieved through the MACD trading strategy may not be a good proxy of actual performance. Furthermore, past performance is not indicative of future performance.
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE, class.source = "fold-show"}
+library(tidyquant) # Loads quantmod, PerformanceAnalytics and TTR packages
+library(tidyverse) # Loads dplyr and ggplot2 packages (data manipulation and plotting)
+```
+
+## 3 Methodology and Data
+
+In my previous project [Backtesting a 5-day and 20-day Moving Average Trading Strategy](https://zheng-liang.github.io/Portfolio%20Optimization%20and%20Back-testing%20Trading%20Strategies/Backtesting%20a%205-day%20and%2020-day%20Moving%20Average%20Trading%20Strategy.html), I implemented a moving average trading strategy on Apple Inc. (AAPL), Exxon Mobil Corporation (XOM), Microsoft Corporation (MSFT), Procter & Gamble Company (PG) and Merck & Co. Inc. (MRK). I would use these same stocks, with price data from January 2018 to October 2022, for my MACD trading strategy to allow for some comparison of trading results. 
+
+The steps for the trading strategy are:
+
+1. Create the MACD indicator with a 20-day fast moving average and a 50-day slow moving average, with a 5-day signal moving average
+2. I would buy and hold the stock if the MACD crosses and stays above the signal line and the MACD or signal line is upward sloping
+3. I would exit my long position if the MACD crosses and stays under the signal line and the MACD or signal line is downward sloping
+
+To determine if the lines are upward sloping, I would find the difference of the current MACD or signal value from the value 5 periods ago. I would buy or sell the stocks at the opening price the next trading day after the trading signal is established. I assumed zero trading costs and that all trades can be filled at any point in time, which is not practical, but allowed me to test the effectiveness of the strategy in a simple manner.
+
+The historical stock prices can be obtained using **`quantmod::getSymbols()`**.
+
+```{r obtain historical prices}
+# Set start and end date for data retrieval
+startdate <- as.Date("2018-01-01")
+enddate <- as.Date("2022-11-01")
+
+# Create vector of tickers
+ticker <- c("AAPL", "XOM", "MSFT", "PG", "MRK")
+
+dat <- list()
+
+for (t in seq(ticker)) {
+  dat[[ticker[t]]] <- quantmod::getSymbols(Symbols = ticker[t], src = "yahoo", auto.assign = FALSE,
+                                           from = startdate, to = enddate, periodicity = "daily")
+}
+
+lapply(dat, head, 3)
+```
+
+## 4 MACD Trading Strategy {.tabset .tabset-pills}
+
+The MACD and signal values can be calculated using **`TTR::MACD()`**. I also added a time component and included the regression to find the slope of the MACD and signal lines.
+
+```{r calculate MACD and signal values and slope}
+# Create MACD and signal values, time component and regress to find slops
+for (i in seq(dat)) {
+  dat[[i]] <- cbind(dat[[i]], TTR::MACD(x = quantmod::Cl(dat[[i]]),
+                                        nFast = 20,
+                                        nSlow = 50,
+                                        nSig = 5,
+                                        maType = "EMA"))
+  
+  dat[[i]]$MACDslope <- diff(dat[[i]]$macd, lag = 5)
+  
+  dat[[i]]$SIGslope <- diff(dat[[i]]$signal, lag = 5)
+}
+```
+
+Generate trading signals by checking if MACD is above the signal line and if either MACD or the signal line is upward sloping:
+
+```{r generate MACD trading signals}
+# Remove rows with missing data
+dat2 <- lapply(dat, na.omit)
+
+# Use for loops to determine if conditions were met
+for (i in seq(dat2)) {
+  dat2[[i]]$trade.signal <- (dat2[[i]]$macd > dat2[[i]]$signal) & (dat2[[i]]$MACDslope > 0) | (dat2[[i]]$SIGslope > 0)
+}
+```
+
+Since I buy or sell at the opening price, I would calculate returns based on these prices for simplicity.
+
+```{r returns from MACD trading strategy}
+# Calculate returns using opening price and lag the trade.signal twice for backtesting
+# Reason: buy the next day after the trade.signal and returns are calculated using previous day value
+for (i in seq(dat2)) {
+  dat2[[i]]$MACDreturn <- Return.calculate(prices = Op(dat2[[i]]), method = "log") * Lag(dat2[[i]]$trade.signal, k = 2)
+}
+```
+
+### 4.1 Plot of Cumulative Return
+
+I plotted the returns from trading each stock against the returns earned by holding the stock over the period.
+
+```{r plot returns from MACD strategy}
+# Calculate the returns earned by holding the stocks using adjusted prices
+# Adjusted prices include splits and dividends information
+for (i in seq(dat2)) {
+  dat2[[i]]$total.return <- Return.calculate(prices = Ad(dat2[[i]]), method = "log")
+}
+
+# Save the cumulative return data in a separate dataframe
+return.plot <- NULL
+
+for (i in seq(dat2)) {
+  return.plot <- cbind(return.plot,
+                       10000 * exp(cumsum(na.omit(dat2[[i]]$MACDreturn))),
+                       10000 * exp(cumsum(na.omit(dat2[[i]]$total.return))))
+}
+
+colnames(return.plot) <- paste(rep(ticker, each = 2), 
+                               rep(c("MACD Trading Strategy", "Total Return"), length(dat2)))
+
+for (i in seq(from = 1, to = ncol(return.plot), by = 2)) {
+  plot(return.plot[, c(i, i+1)],
+       main = paste("Comparison of Cumulative Returns for", rep(ticker, each = 2)[i]),
+       legend.loc = "topleft", grid.col = NA) %>% 
+    print()
+}
+```
+
+### 4.2 Table of Annualized Metrics
+
+Calculate the annualized returns and standard deviation for comparison of performance using **`PerformanceAnalytics::table.AnnualizedReturns()`**.
+
+```{r annualized return and sd of MACD trading strategy}
+for (i in seq(dat2)) {
+  PerformanceAnalytics::table.AnnualizedReturns(R = dat2[[i]][, c("MACDreturn","total.return")],
+                                                scale = 252,
+                                                Rf = 0.03/252,
+                                                geometric = FALSE) %>%
+    `colnames<-`(paste(rep(ticker[i], 2),
+                       rep(c("MACD Trading Strategy", "Total Return")))) %>%
+    print()
+}
+```
+
+## 5 Final Remarks
+
+Similar to the moving average trading strategy I tested previously, the MACD trading strategy worked for some stocks while performing poorly for others. This again showed that a trading strategy does not work equally for all stocks. Despite achieving excess returns for AAPL and XOM, it was obtained under the assumption of zero transaction costs. It would be safer to assume that the transaction costs would significantly reduce the returns from active trading, depending on the frequency of the trades made.
