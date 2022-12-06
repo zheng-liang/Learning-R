@@ -68,4 +68,18 @@ for all stocks, but applying the CAPM trading strategy on Apple Inc. was able to
 stock had outperformed the S&P 500 ETF over the years but it could be attributed to having chosen a stock that had outperformed 
 the market consistently.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/2p9d26jp
+Click the link to access the rendered HTML file: https://tinyurl.com/2p9d26jp  
+
+### 6 Backtesting a 5-day and 20-day Moving Average Trading Strategy 
+
+Through this project, I tested the feasibility of using 5-day and 20-day Moving Averages to generate trading signals. I used the 
+Simple Moving Average and Exponential Moving Average on the daily timeframe to generate signals for short-term trading and 
+tested its effectiveness.  
+
+The results show that SMA and EMA can provide excess returns for some stocks and may lead to poor returns when used on other stocks. 
+However, these results were based on the assumptions of zero trading costs and that trades could be filled at the opening prices at
+any point in time. By including trading costs, one would obtain significantly lower returns depending on how frequent buy and sell 
+signals were generated. Furthermore, past performance is not indicative of future performance and thus, if the results show that the 
+moving average strategy worked for a stock based on the backtest, it may not work in the future.
+
+Click the link to access the rendered HTML file: https://tinyurl.com/2d37y3e3
