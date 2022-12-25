@@ -24,8 +24,8 @@ US1M <- quantmod::getSymbols(Symbols = "DGS1MO", src = "FRED", auto.assign = FAL
 rfr <- US1M["2017-12-31/2022-10-31"]
 
 ## ----merge data---------------------------------------------------------------
-# Merge adjusted closing prices (col. 6) of AAPL and SPY with risk-free rate
-dat <- merge(aapl[,6], spy[,6], rfr, all = F)
+# Merge closing prices of AAPL and SPY with risk-free rate
+dat <- merge(Cl(aapl), Cl(spy), rfr, all = FALSE)
 
 # Rename columns
 colnames(dat) <- c("AAPL", "SPY", "RFR")
@@ -49,51 +49,126 @@ dat <- cbind(dat,
 
 head(dat)
 
-## ----beta and expected return-------------------------------------------------
-dat$beta <- rollapply(data = dat[-1, 4:5], width = 5, by.column = F, 
+## ----beta required return and expected return---------------------------------
+dat$beta <- rollapply(data = dat[-1, 4:5], width = 30, by.column = F, 
                       function(x) CAPM.beta(Ra = x[,1], Rb = x[,2]))
 
-dat$exp.return <- rollapply(data = dat[-1, 4], width = 5, mean)
+# Calculate the required return for AAPL based on CAPM each day, after obtaining the average market return and risk-free rate:
+dat$mean.RFR <- SMA(x = dat$RFR[-1], n = 30)
 
-## ----required return----------------------------------------------------------
-dat$mean.RFR <- rollapply(data = dat[-1, 3], width = 5, mean)
-
-dat$mean.RM <- rollapply(data = dat[-1, 5], width = 5, mean)
+dat$mean.RM <- SMA(x = dat$rSPY[-1], n = 30)
 
 dat$req.return <- dat$mean.RFR + dat$beta * (dat$mean.RM - dat$mean.RFR)
 
-## ----trading signal-----------------------------------------------------------
+dat$exp.return <- SMA(x = dat$rAAPL[-1], n = 30)
+
+## ----trading signal, class.source = 'fold-hide'-------------------------------
 # Create a new xts object saving only the needed columns of data
-dat2 <- na.omit(merge(dat[,c(7,10)], aapl$AAPL.Open))
+dat2 <- na.omit(merge(dat[,c("req.return","exp.return")], Op(aapl)))
 
-# Use the Lag() function to shift the results down one row
-dat2$signal <- Lag(dat2$exp.return > dat2$req.return & dat2$exp.return > 0)
+# Include one-period lag to indicate buy/sell on the next period
+dat2$signal <- Lag(dat2$exp.return > dat2$req.return & dat2$req.return > 0)
 
-## ----returns from trading strategy--------------------------------------------
-# Signal created can be seen as the weight of the asset on a particular day
-# Need to lag one more period as I assume a buy or sell on the next trading day opening price
-trading_returns <- Return.calculate(prices = dat2$AAPL.Open, method = "log") * Lag(dat2$signal)
+# Create a position column
+dat2$position <- 0
 
-# Plot cumulative return from trading strategy by converting log returns to standard returns
-# Assume starting capital of $10,000
-plot(10000*(exp(cumsum(na.omit(trading_returns)))), 
+for (i in 2:nrow(dat2)) {
+  if (i == 2 & dat2$signal[i] == 1) {
+    dat2$position[i] <- 1
+  } else {
+    dat2$position[i] <- 0
+  }
+  
+  if (i > 2 & dat2$signal[i] == 1) {
+    if (dat2$signal[i-1] == 0) {
+      dat2$position[i] <- 1
+    } else {
+      dat2$position[i] <- 0
+    }
+  }
+  
+  if (i > 2 & dat2$signal[i] == 0) {
+    if (dat2$signal[i-1] == 1) {
+      dat2$position[i] <- -1
+    } else {
+      dat2$position[i] <- 0
+    }
+  }
+}
+
+# Remove the missing value due to lagging the signal by one period
+dat2 <- na.omit(dat2)
+
+head(dat2)
+
+## ----returns from trading strategy, class.source = 'fold-hide'----------------
+# Assume that I started with $10,000 capital and buy as many shares as possible with
+# the portfolio value available
+# Also assume a 0.5% buy/sell transaction cost
+portfolio_value <- xts(matrix(nrow = nrow(dat2), ncol = 2, dimnames = list(index(dat2), c("Stock.Value", "Cash"))), order.by = index(dat2))
+
+for (i in seq(nrow(dat2))) {
+  if (i == 1 & dat2$position[i] == 1) {
+    
+    # Apply 0.5% to stock price when calculating number of shares to buy to ensure that 
+    # there is cash available to pay the transaction cost
+    portfolio_value$Stock.Value[i] <- floor(10000 / (dat2$AAPL.Open[i] * 1.005)) * dat2$AAPL.Open[i]
+    
+    portfolio_value$Cash[i] <- 10000 - floor(10000 / (dat2$AAPL.Open[i] * 1.005)) * dat2$AAPL.Open[i] * 1.005
+    
+  } else if (i == 1 & dat2$position[i] == 0) {
+    
+    portfolio_value$Stock.Value[i] <- 0
+    
+    portfolio_value$Cash[i] <- 10000
+    
+  } else if (i > 1 & dat2$position[i] == 1) {
+    
+    portfolio_value$Stock.Value[i] <- floor(as.vector(portfolio_value$Cash)[i-1] / (as.vector(dat2$AAPL.Open)[i] * 1.005)) * as.vector(dat2$AAPL.Open)[i]
+    
+    portfolio_value$Cash[i] <- as.vector(portfolio_value$Cash)[i-1] - floor(as.vector(portfolio_value$Cash)[i-1] / (as.vector(dat2$AAPL.Open)[i] * 1.005)) * dat2$AAPL.Open[i] * 1.005
+    
+  } else if (i > 1 & dat2$position[i] == -1) {
+    
+    portfolio_value$Stock.Value[i] <- 0
+    
+    portfolio_value$Cash[i] <- as.vector(portfolio_value$Cash)[i-1] + as.vector(portfolio_value$Stock.Value)[i-1] * 0.995
+    
+  } else if (i > 1 & dat2$position[i] == 0 & dat2$signal[i] == 1) {
+    
+    portfolio_value$Stock.Value[i] <- as.vector(portfolio_value$Stock.Value)[i-1] / as.vector(dat2$AAPL.Open)[i-1] * dat2$AAPL.Open[i]
+    
+    portfolio_value$Cash[i] <- portfolio_value$Cash[i-1]
+    
+  } else {
+    
+    portfolio_value$Stock.Value[i] <- 0
+    
+    portfolio_value$Cash[i] <- portfolio_value$Cash[i-1]
+    
+  }
+}
+
+plot(portfolio_value$Stock.Value + portfolio_value$Cash, 
      main = "Cumulative Return from CAPM Trading Strategy",
      grid.col = NA)
 
-## ----plot returns for comparison----------------------------------------------
-return_plot <- merge(10000*(exp(cumsum(na.omit(dat$rAAPL/100)))), 
-           10000*(exp(cumsum(na.omit(trading_returns)))), 
-           10000*(exp(cumsum(na.omit(dat$rSPY/100)))))
+## ----plot returns for comparison, class.source = 'fold-hide'------------------
+return_plot <- merge(10000*(exp(cumsum(na.omit(Return.calculate(prices = Ad(aapl), method = "log"))))), 
+                     portfolio_value$Stock.Value + portfolio_value$Cash, 
+                     10000*(exp(cumsum(na.omit(dat$rSPY/100)))))
 
 colnames(return_plot) <- c("Buy-and-Hold", "CAPM Trading Strategy", "S&P 500 ETF")
 
-plot(return_plot, 
-     main = "Comparison of Cumulative Returns", 
+plot(return_plot,
+     main = "Comparison of Cumulative Returns",
      legend.loc = "topleft",
      grid.col = NA)
 
 ## ----risk and return metrics--------------------------------------------------
-return_dat <- merge(dat$rAAPL/100, trading_returns, dat$rSPY/100)
+return_dat <- merge(dat$rAAPL/100, 
+                    Return.calculate(prices = portfolio_value$Stock.Value + portfolio_value$Cash, method = "log"), 
+                    dat$rSPY/100)
 
 colnames(return_dat) <- c("Buy-and-Hold", "CAPM Trading Strategy", "S&P 500 ETF")
 
