@@ -156,7 +156,7 @@ plot(portfolio_value$Stock.Value + portfolio_value$Cash,
 ## ----plot returns for comparison, class.source = 'fold-hide'------------------
 return_plot <- merge(10000*(exp(cumsum(na.omit(Return.calculate(prices = Ad(aapl), method = "log"))))), 
                      portfolio_value$Stock.Value + portfolio_value$Cash, 
-                     10000*(exp(cumsum(na.omit(dat$rSPY/100)))))
+                     10000*(exp(cumsum(na.omit(Return.calculate(prices = Ad(spy), method = "log"))))))
 
 colnames(return_plot) <- c("Buy-and-Hold", "CAPM Trading Strategy", "S&P 500 ETF")
 
@@ -166,9 +166,9 @@ plot(return_plot,
      grid.col = NA)
 
 ## ----risk and return metrics--------------------------------------------------
-return_dat <- merge(dat$rAAPL/100, 
+return_dat <- merge(Return.calculate(prices = Ad(aapl), method = "log"), 
                     Return.calculate(prices = portfolio_value$Stock.Value + portfolio_value$Cash, method = "log"), 
-                    dat$rSPY/100)
+                    Return.calculate(prices = Ad(spy), method = "log"))
 
 colnames(return_dat) <- c("Buy-and-Hold", "CAPM Trading Strategy", "S&P 500 ETF")
 
