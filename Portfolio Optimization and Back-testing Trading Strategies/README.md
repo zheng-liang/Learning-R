@@ -71,13 +71,13 @@ Click the link to access the rendered HTML file: https://tinyurl.com/mryyeu8s
 ### 5 Testing a Trading Strategy Using a Rolling Window CAPM <a name="project5"></a>
 
 This project aims to test if the Capital Asset Pricing Model (CAPM) estimated using a rolling window could allow an investor 
-or trader to take advantage of inefficiencies in market pricing. I used a short-term modeling strategy with 5 trading days of 
+or trader to take advantage of inefficiencies in market pricing. I used a short-term modeling strategy with 30 trading days of 
 historical data per estimation to capture the short-term pricing inefficiencies. It does not conclude if the strategy is effective 
-for all stocks, but applying the CAPM trading strategy on Apple Inc. was able to yield short-term outperformance. Furthermore, the 
-stock had outperformed the S&P 500 ETF over the years but it could be attributed to having chosen a stock that had outperformed 
-the market consistently.  
+for all stocks, but applying the CAPM trading strategy on Apple Inc. was able to yield a higher risk-to-return ratio as measured by
+the annualized Sharpe ratio compared to a buy-and-hold strategy . Furthermore, the stock had outperformed the S&P 500 ETF over the 
+years but it could be attributed to having chosen a stock that had outperformed the market consistently.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/2p9d26jp  
+Click the link to access the rendered HTML file: https://tinyurl.com/kttkj6w6  
 
 ### 6 Backtesting a 5-day and 20-day Moving Average Trading Strategy <a name="project6"></a>
 
