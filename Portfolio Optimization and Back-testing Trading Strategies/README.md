@@ -1,6 +1,15 @@
 ## Project Description
 
-### 1 Portfolio Optimization and Back-testing
+### Table of Contents
+1. [Portfolio Optimization and Back-testing](#project1)
+2. [Effects of Risk Measures on Portfolio Composition and Performance](#project2)
+3. [Random Selection, Expertise and Index Investing](#project3)
+4. [Returns and Risks: The Mean and The Median](#project4)
+5. [Testing a Trading Strategy Using a Rolling Window CAPM](#project5)
+6. [Backtesting a 5-day and 20-day Moving Average Trading Strategy](#project6)
+7. [Backtesting a MACD Trading Strategy](#project7)
+
+### 1 Portfolio Optimization and Back-testing <a name="project1"></a>
 
 The purpose of this project was to apply what I had learnt in R onto portfolio optimization.  
 
@@ -14,7 +23,7 @@ portfolio method.
 
 Click the link to access the rendered HTML file: https://tinyurl.com/yfyxuzat
 
-### 2 Effects of Risk Measures on Portfolio Composition and Performance
+### 2 Effects of Risk Measures on Portfolio Composition and Performance <a name="project2"></a>
 
 In this project, I attempted to determine the effects of the different risk measures on portfolio optimization and performance. The following risk measures have been used:  
 
@@ -33,7 +42,7 @@ The portfolio was created using 10 large-cap U.S. equities, and benchmarked agai
 
 Click the link to access the rendered HTML file: https://tinyurl.com/4cdu4r47  
 
-### 3 Random Selection, Expertise and Index Investing
+### 3 Random Selection, Expertise and Index Investing <a name="project3"></a>
 
 The aim of this project is to find out if portfolios made of 15 randomly selected stocks from the S&P500 Large-Cap Index
 can outperform stock-picking experts and index investing. The portfolios were optimized based on the mean-variance framework
@@ -44,7 +53,7 @@ make use of any statistical methods to prove that random selection, expertise or
 
 Click the link to access the rendered HTML file: https://tinyurl.com/e5ed7mws
 
-### 4 Returns and Risks: The Mean and The Median
+### 4 Returns and Risks: The Mean and The Median <a name="project4"></a>
 
 The purpose of this project is to find out if using median returns in portfolio optimization could lead to better portfolio 
 performance compared to mean returns. Due to the non-normal distribution of returns, the median may be a better optimization 
@@ -59,7 +68,7 @@ the median measure is better than the mean.
 
 Click the link to access the rendered HTML file: https://tinyurl.com/mryyeu8s
 
-### 5 Testing a Trading Strategy Using a Rolling Window CAPM
+### 5 Testing a Trading Strategy Using a Rolling Window CAPM <a name="project5"></a>
 
 This project aims to test if the Capital Asset Pricing Model (CAPM) estimated using a rolling window could allow an investor 
 or trader to take advantage of inefficiencies in market pricing. I used a short-term modeling strategy with 5 trading days of 
@@ -70,7 +79,7 @@ the market consistently.
 
 Click the link to access the rendered HTML file: https://tinyurl.com/2p9d26jp  
 
-### 6 Backtesting a 5-day and 20-day Moving Average Trading Strategy 
+### 6 Backtesting a 5-day and 20-day Moving Average Trading Strategy <a name="project6"></a>
 
 Through this project, I tested the feasibility of using 5-day and 20-day Moving Averages to generate trading signals. I used the 
 Simple Moving Average and Exponential Moving Average on the daily timeframe to generate signals for short-term trading and 
@@ -80,6 +89,16 @@ The results show that SMA and EMA can provide excess returns for some stocks and
 However, these results were based on the assumptions of zero trading costs and that trades could be filled at the opening prices at
 any point in time. By including trading costs, one would obtain significantly lower returns depending on how frequent buy and sell 
 signals were generated. Furthermore, past performance is not indicative of future performance and thus, if the results show that the 
-moving average strategy worked for a stock based on the backtest, it may not work in the future.
+moving average strategy worked for a stock based on the backtest, it may not work in the future.  
 
-Click the link to access the rendered HTML file: https://tinyurl.com/2d37y3e3
+Click the link to access the rendered HTML file: https://tinyurl.com/2d37y3e3  
+
+### 7 Backtesting a MACD Trading Strategy <a name="project7"></a>
+
+In this project, I backtested the Moving Average Convergence/Divergence (MACD) trading strategy. I used the exponential moving 
+averages with the 20-period, 50-period and 5-period as my fast, slow and signal EMAs. The results in this project were based on 
+the assumptions of zero trading costs and that trades could be filled at the opening prices at any point in time. Therefore, any 
+excess return that was achieved through the MACD trading strategy may not be a good proxy of actual performance. Furthermore, past 
+performance is not indicative of future performance.  
+
+Click the link to access the rendered HTML file: https://tinyurl.com/4f7tad9t
