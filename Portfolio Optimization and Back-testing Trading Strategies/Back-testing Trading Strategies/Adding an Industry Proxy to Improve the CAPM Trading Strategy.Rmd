@@ -1,0 +1,179 @@
+---
+title: "Adding an Industry Proxy to Improve the CAPM Trading Strategy"
+author: "Tan Zheng Liang"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+    highlight: tango
+    theme: flatly
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align="center")
+knitr::knit_hooks$set(purl = knitr::hook_purl)
+```
+
+## 1 Introduction
+
+In my previous project titled [Testing a Trading Strategy Using a Rolling Window CAPM](https://zheng-liang.github.io/Portfolio%20Optimization%20and%20Back-testing%20Trading%20Strategies/Testing%20a%20Trading%20Strategy%20Using%20a%20Rolling%20Window%20CAPM.html), I used a 30-day rolling window CAPM to generate trading signals for Apple Inc. (AAPL). In this project, I attempted to improve the trading strategy by adding another variable to estimate the required rate of return for the stock from the asset pricing model.
+
+(Summary of results)
+
+## 2 Packages Required
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(tidyquant) # Loads quantmod and PerformanceAnalytics packages
+library(tidyverse) # Loads dplyr and ggplot2 packages (data manipulation and plotting)
+```
+
+## 3 Methodology and Data
+
+I still used the AAPL data from January 2018 to October 2022 so that some comparison can be made. The required rate of return based on the asset pricing model was estimated using a 30-day rolling window. The SPDR S&P 500 ETF (SPY) was used as the market proxy and I added the Technology Select Sector SPDR Fund (XLK) as a sector proxy to explain differences in the technology sector return and the market return.
+
+The model can be written as:
+
+$$
+E(R_i) - R_f = \alpha + \beta_1[E(R_M) - R_f] + \beta_2[E(R_S) - E(R_M)] + \varepsilon
+$$
+
+where $E(R_i)$ is the expected return for stock $i$, $R_f$ is the risk-free rate proxied by the market yield on the 1-month US Treasury security (FRED: DGS1MO), $E(R_M)$ is the expected market return, and $E(R_S)$ is the expected return from the sector which the stock is classified in.
+
+The steps to obtain trading signals from the augmented asset pricing model are:
+
+1. Estimate the coefficients of the variables using a 30-day rolling window
+2. Estimate the required rate of return using the asset pricing model, where $E(R_M)$, $R_f$ and $E(R_S)$ is estimated using a 30-day simple moving average
+3. Estimate the expected rate of return of the stock, based on a naive method of using a 30-day simple moving average
+4. Compare expected return to required return
+
+If expected return is more than required return, the stock is undervalued and I would take a long position on the stock on the next trading day at the opening price. If the expected return is less than the required return, the stock is overvalued and I would sell the long position (or take a short position for sophisticated traders) on the next trading day. I would not hold a position in the stock if the required return calculated by CAPM is negative. I assumed that trades can be filled at any point in time and a 0.5% transaction cost (on both buy and sell transactions).
+
+Using **`quantmod::getSymbols()`**, the historical prices of AAPL, SPY, and XLK can be retrieved, as well as the market yield of the 1-month US T-Bill from the FRED database.
+
+```{r obtain historical data and merge into dat}
+# Set start and end date for data retrieval (does not work when retrieving data from FRED)
+startdate <- as.Date("2017-12-31")
+enddate <- as.Date("2022-11-01")
+
+spy <- quantmod::getSymbols(Symbols = "SPY", src = "yahoo", auto.assign = FALSE,
+                            from = startdate, to = enddate, periodicity = "daily")
+
+aapl <- quantmod::getSymbols(Symbols = "AAPL", src = "yahoo", auto.assign = FALSE,
+                            from = startdate, to = enddate, periodicity = "daily")
+
+xlk <- quantmod::getSymbols(Symbols = "XLK", src = "yahoo", auto.assign = FALSE,
+                            from = startdate, to = enddate, periodicity = "daily")
+
+# Retrieving data from FRED automatically retrieves the whole series available
+US1M <- quantmod::getSymbols(Symbols = "DGS1MO", src = "FRED", auto.assign = FALSE)
+
+rfr <- US1M["2017-12-31/2022-10-31"]
+
+# Merge closing prices of AAPL, SPY and XLK with risk-free rate
+dat <- merge(Cl(aapl), Cl(spy), Cl(xlk), rfr, all = FALSE)
+
+# Rename columns
+colnames(dat) <- c("AAPL", "SPY", "XLK", "RFR")
+
+# Check for missing data
+colSums(is.na(dat))
+
+# Replace NA in rfr with last observation and convert to simple daily rate by dividing 252
+dat$RFR <- na.locf(dat$RFR)/252
+
+# Preview data
+head(dat)
+```
+
+```{r calculate log returns for stocks}
+# Calculate log returns for AAPL, SPY and XLK using PerformanceAnalytics::Return.calculate()
+# Convert returns to percentage
+for (i in 1:3) {
+  tmp <- PerformanceAnalytics::Return.calculate(prices = dat[, i], method = "log") * 100
+  
+  dat <- cbind (dat, tmp)
+  
+  colnames(dat)[4+i] <- paste("r", colnames(dat[,i]), sep = "")
+}
+
+# Calculate AAPL excess return (eAAPL), market excess return (MER) and sector excess return (SER)
+dat$eAAPL <- dat$rAAPL - dat$RFR
+dat$MER <- dat$rSPY - dat$RFR
+dat$SER <- dat$rXLK - dat$rSPY
+
+head(dat)
+```
+
+## 4 Estimating Required and Expected Returns
+
+The coefficients for MER and SER can be estimated with **`PerformanceAnalytics::CAPM.beta()`** and **`rollapply()`** using the past 30 observations.
+
+```{r calculate betas of the asset pricing model and intercept}
+# Intercept or constant
+dat$alpha <- rollapply(data = dat[-1, 8:10], width = 30, by.column = FALSE,
+                       FUN = function(x) coef(lm(formula = eAAPL ~ MER + SER, data = x))[1])
+
+# Coefficient of the MER variable
+dat$b1 <- rollapply(data = dat[-1, 8:10], width = 30, by.column = FALSE,
+                    FUN = function(x) coef(lm(formula = eAAPL ~ MER + SER, data = x))[2])
+
+# Coefficient of the SER variable
+dat$b2 <- rollapply(data = dat[-1, 8:10], width = 30, by.column = FALSE,
+                    FUN = function(x) coef(lm(formula = eAAPL ~ MER + SER, data = x))[3])
+```
+
+Calculate expected returns using 30-day simple moving averages with **`TTR::SMA()`**.
+
+```{r calculate expected and required returns}
+dat$exp.MER <- TTR::SMA(x = dat$MER[-1], n = 30)
+
+dat$exp.SER <- TTR::SMA(x = dat$SER[-1], n = 30)
+
+# Calculate required return based on the asset pricing model
+dat$req.return <- dat$alpha + dat$b1 * dat$exp.MER + dat$b2 * dat$exp.SER
+
+# Calculate expected excess return of AAPL
+dat$exp.return <- TTR::SMA(x = dat$eAAPL[-1], n = 30)
+
+# Copy data onto a new dataframe, dat2
+dat2 <- na.omit(merge(Op(aapl), dat[, c("req.return","exp.return")]))
+
+head(dat2)
+```
+
+## 5 Implementing the Trading Strategy
+
+I created a signal variable that was assigned "1" when the expected return was more than the required return and "0" when the expected return was less than the required return. A position variable was also created and was assigned "1" for a buy transaction, "-1" for a sell transaction, and "0" otherwise. (I have hidden the code, but you may un-hide it by clicking the "Code" button to view the full code.)
+
+```{r trading signal, class.source = 'fold-hide'}
+# Include one-period lag to indicate buy/sell on the next period
+dat2$signal <- Lag(dat2$exp.return > dat2$req.return & dat2$req.return > 0)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
